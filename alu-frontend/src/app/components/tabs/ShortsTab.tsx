@@ -324,6 +324,7 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
             </div>
           )}
         </div>
+        </div>
       </div>
 
       {/* Comments drawer */}
