@@ -5,7 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useUser, useClerk, useAuth } from '@clerk/nextjs';
 import { db, Post } from '../../db';
 import MediaItem from '../MediaItem';
-import { SettingsIcon, ShieldIcon, FileTextIcon, LogOutIcon, MoreVertIcon } from '../icons';
+import { SettingsIcon, ShieldIcon, FileTextIcon, LogOutIcon, MoreVertIcon, ShortsIcon, VideosIcon, HeartIcon, BookmarkIcon } from '../icons';
 import PrivacyPolicy from '../PrivacyPolicy';
 import TermsConditions from '../TermsConditions';
 import EditProfile from '../EditProfile';
@@ -176,18 +176,40 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
     setProfileShowNormal(!profileShowNormal);
   };
 
-  const contentTabs: { key: ContentTab; label: string }[] = isOwnProfile
+  const contentTabs: { key: ContentTab; label: string; icon: JSX.Element }[] = isOwnProfile
     ? [
-        { key: 'posts', label: 'Posts' },
-        { key: 'shorts', label: 'Shorts' },
-        { key: 'videos', label: 'Videos' },
-        { key: 'likes', label: 'Likes' },
-        { key: 'favorites', label: 'Favorites' },
+        {
+          key: 'posts',
+          label: 'Posts',
+          icon: (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <rect x="3" y="3" width="7" height="7" />
+              <rect x="14" y="3" width="7" height="7" />
+              <rect x="3" y="14" width="7" height="7" />
+              <rect x="14" y="14" width="7" height="7" />
+            </svg>
+          ),
+        },
+        { key: 'shorts', label: 'Shorts', icon: <ShortsIcon size={20} /> },
+        { key: 'videos', label: 'Videos', icon: <VideosIcon size={20} /> },
+        { key: 'likes', label: 'Likes', icon: <HeartIcon size={20} /> },
+        { key: 'favorites', label: 'Favorites', icon: <BookmarkIcon size={20} /> },
       ]
     : [
-        { key: 'posts', label: 'Posts' },
-        { key: 'shorts', label: 'Shorts' },
-        { key: 'videos', label: 'Videos' },
+        {
+          key: 'posts',
+          label: 'Posts',
+          icon: (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <rect x="3" y="3" width="7" height="7" />
+              <rect x="14" y="3" width="7" height="7" />
+              <rect x="3" y="14" width="7" height="7" />
+              <rect x="14" y="14" width="7" height="7" />
+            </svg>
+          ),
+        },
+        { key: 'shorts', label: 'Shorts', icon: <ShortsIcon size={20} /> },
+        { key: 'videos', label: 'Videos', icon: <VideosIcon size={20} /> },
       ];
 
   // Use favoritePosts when on favorites tab, otherwise use userPosts
@@ -358,9 +380,24 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
       )}
 
       {/* Profile Header */}
-      <div className="px-4 py-6">
-        <div className="flex items-start gap-5">
-          <div className="w-20 h-20 rounded-full bg-alu-surface flex items-center justify-center shrink-0 overflow-hidden">
+      <div className="px-4 pt-4 pb-5 border-b border-alu-border">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-[20px] font-bold text-alu-text leading-none">
+            {isOwnProfile ? ownDisplayName : otherDisplayName}
+          </h2>
+          {isOwnProfile && (
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="text-alu-text-secondary hover:text-alu-text transition-colors"
+              aria-label="Profile settings"
+            >
+              <SettingsIcon size={21} />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-6">
+          <div className="w-20 h-20 rounded-full bg-alu-surface flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-alu-border">
             {isOwnProfile ? (
               user?.imageUrl ? (
                 <img src={user.imageUrl} alt={ownDisplayName} className="w-full h-full object-cover" />
@@ -375,44 +412,34 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
               )
             )}
           </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <h2 className="text-lg font-bold text-alu-text">
-                {isOwnProfile ? ownDisplayName : otherDisplayName}
-              </h2>
-              {isOwnProfile && (
-                <button
-                  onClick={() => setShowSettings(!showSettings)}
-                  className="text-alu-text-secondary hover:text-alu-text transition-colors"
-                >
-                  <SettingsIcon size={20} />
-                </button>
-              )}
+
+          <div className="flex-1 grid grid-cols-3 gap-3">
+            <div className="text-center">
+              <span className="text-[17px] font-bold text-alu-text block leading-none">
+                {isOwnProfile
+                  ? totalPosts
+                  : (otherUser?.counts?.posts ?? 0) + (otherUser?.counts?.shorts ?? 0) + (otherUser?.counts?.videos ?? 0)}
+              </span>
+              <span className="text-xs text-alu-text-tertiary">Posts</span>
             </div>
-            <div className="flex gap-6 mb-3">
-              <div className="text-center">
-                <span className="text-base font-bold text-alu-text block">
-                  {isOwnProfile ? totalPosts : (otherUser?.counts?.posts ?? 0) + (otherUser?.counts?.shorts ?? 0) + (otherUser?.counts?.videos ?? 0)}
-                </span>
-                <span className="text-[11px] text-alu-text-tertiary">Posts</span>
-              </div>
-              <div className="text-center">
-                <span className="text-base font-bold text-alu-text block">
-                  {isOwnProfile ? ownFollowersCount : followersCount}
-                </span>
-                <span className="text-[11px] text-alu-text-tertiary">Followers</span>
-              </div>
-              <div className="text-center">
-                <span className="text-base font-bold text-alu-text block">
-                  {isOwnProfile ? ownFollowingCount : followingCount}
-                </span>
-                <span className="text-[11px] text-alu-text-tertiary">Following</span>
-              </div>
+            <div className="text-center">
+              <span className="text-[17px] font-bold text-alu-text block leading-none">
+                {isOwnProfile ? ownFollowersCount : followersCount}
+              </span>
+              <span className="text-xs text-alu-text-tertiary">Followers</span>
             </div>
-            <p className="text-sm text-alu-text-secondary">
-              {isOwnProfile ? ownBio : otherBio}
-            </p>
+            <div className="text-center">
+              <span className="text-[17px] font-bold text-alu-text block leading-none">
+                {isOwnProfile ? ownFollowingCount : followingCount}
+              </span>
+              <span className="text-xs text-alu-text-tertiary">Following</span>
+            </div>
           </div>
+        </div>
+
+        <div className="mt-4">
+          <p className="text-sm font-semibold text-alu-text mb-0.5">{isOwnProfile ? ownDisplayName : otherDisplayName}</p>
+          <p className="text-sm text-alu-text-secondary break-words">{isOwnProfile ? ownBio : otherBio}</p>
         </div>
 
         {/* Action Buttons */}
@@ -421,13 +448,13 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
             <>
               <button
                 onClick={() => setShowEditProfile(true)}
-                className="flex-1 py-2 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors"
+                className="flex-1 py-2 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors border border-alu-border"
               >
                 Edit Profile
               </button>
               <button
                 onClick={handleShareProfile}
-                className="flex-1 py-2 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors"
+                className="flex-1 py-2 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors border border-alu-border"
               >
                 {copiedLink ? 'Copied!' : 'Share Profile'}
               </button>
@@ -438,16 +465,15 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
                 onClick={handleFollow}
                 className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
                   isFollowing
-                    ? 'bg-alu-surface text-alu-text hover:bg-alu-border'
-                    : 'text-white'
+                    ? 'bg-alu-surface text-alu-text hover:bg-alu-border border border-alu-border'
+                    : 'bg-[#0095f6] text-white hover:bg-[#1084d7]'
                 }`}
-                style={!isFollowing ? { background: 'linear-gradient(135deg, var(--alu-primary), var(--alu-primary-light))' } : undefined}
               >
                 {isFollowing ? 'Following' : 'Follow'}
               </button>
               <button
                 onClick={handleShareProfile}
-                className="flex-1 py-2 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors"
+                className="flex-1 py-2 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors border border-alu-border"
               >
                 {copiedLink ? 'Copied!' : 'Share Profile'}
               </button>
@@ -552,41 +578,49 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
             <button
               key={tab.key}
               onClick={() => setActiveContentTab(tab.key)}
-              className={`flex-1 min-w-[80px] py-3 text-xs font-semibold text-center transition-all duration-200 border-b-2 ${activeContentTab === tab.key
-                  ? 'border-[var(--alu-primary)] text-[var(--alu-primary-dark)]'
+              className={`flex-1 min-w-[72px] py-2.5 text-[11px] font-semibold text-center transition-all duration-200 border-b-2 ${
+                activeContentTab === tab.key
+                  ? 'border-alu-text text-alu-text'
                   : 'border-transparent text-alu-text-tertiary hover:text-alu-text-secondary'
-                }`}
+              }`}
             >
-              {tab.label}
+              <span className="flex flex-col items-center gap-1">
+                <span>{tab.icon}</span>
+                <span>{tab.label}</span>
+              </span>
             </button>
           ))}
         </div>
       </div>
 
       {/* AI / Normal filter */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-alu-border-light">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-alu-border-light bg-white">
         <span className="text-xs text-alu-text-tertiary mr-1">Show:</span>
         <button
           onClick={toggleProfileAI}
-          className={`toggle-pill px-3 py-1 rounded-full text-xs font-medium ${profileShowAI ? 'toggle-pill-active' : 'bg-[var(--alu-surface)] text-[var(--alu-text-tertiary)]'}`}
+          className={`toggle-pill px-3 py-1 rounded-full text-xs font-medium ${
+            profileShowAI ? 'bg-alu-text text-white' : 'bg-[var(--alu-surface)] text-[var(--alu-text-tertiary)]'
+          }`}
         >
           AI
         </button>
         <button
           onClick={toggleProfileNormal}
-          className={`toggle-pill px-3 py-1 rounded-full text-xs font-medium ${profileShowNormal ? 'toggle-pill-active' : 'bg-[var(--alu-surface)] text-[var(--alu-text-tertiary)]'}`}
+          className={`toggle-pill px-3 py-1 rounded-full text-xs font-medium ${
+            profileShowNormal ? 'bg-alu-text text-white' : 'bg-[var(--alu-surface)] text-[var(--alu-text-tertiary)]'
+          }`}
         >
           Normal
         </button>
       </div>
 
       {/* Content Grid */}
-      <div className="grid grid-cols-3 gap-0.5 p-0.5">
+      <div className="grid grid-cols-3 gap-px bg-alu-border">
         {currentContent.length > 0 ? (
           currentContent.map((post) => (
             <div
               key={post._id}
-              className="aspect-square relative overflow-hidden bg-alu-surface group"
+              className="aspect-square relative overflow-hidden bg-white group"
             >
               <div className="cursor-pointer" onClick={() => setSelectedPost(post)}>
                 <MediaItem post={post} />

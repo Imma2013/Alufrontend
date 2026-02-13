@@ -28,7 +28,7 @@ interface HomeTabProps {
 export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUser }: HomeTabProps) {
   const { getToken, isSignedIn } = useAuth();
   const { user } = useUser();
-  const [likedPosts, setLikedPosts] = useState<Record<string, number>>({}); // postId -> like count
+  const [likedPosts, setLikedPosts] = useState<Record<string, number>>({});
   const [likedByMe, setLikedByMe] = useState<Set<string>>(new Set());
   const [savedPosts, setSavedPosts] = useState<Set<string>>(new Set());
   const [isSyncing, setIsSyncing] = useState(false);
@@ -40,13 +40,11 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
   const [isSearchingPeople, setIsSearchingPeople] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Live query from Dexie — real posts
   const allPosts = useLiveQuery(
     () => db.posts.orderBy('timestamp').reverse().toArray(),
     []
   );
 
-  // Debounced people search (Home tab is dual: people + posts)
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
@@ -63,7 +61,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
         const res = await fetch(
           `${backendUrl}/users/search?q=${encodeURIComponent(searchQuery.trim())}`,
-          { headers: token ? { 'Authorization': `Bearer ${token}` } : {} }
+          { headers: token ? { Authorization: `Bearer ${token}` } : {} }
         );
         if (res.ok) {
           const data = await res.json();
@@ -76,26 +74,30 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
       }
     }, 300);
 
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [searchQuery, getToken]);
 
-  // Filter by AI/Normal toggles + search query
-  const posts = allPosts?.filter((p: Post) => {
-    // AI/Normal filter
-    if (showAI && showNormal) { /* show all */ }
-    else if (showAI && !showNormal) { if (!p.is_ai) return false; }
-    else if (!showAI && showNormal) { if (p.is_ai) return false; }
+  const posts =
+    allPosts?.filter((p: Post) => {
+      if (showAI && !showNormal) {
+        if (!p.is_ai) return false;
+      } else if (!showAI && showNormal) {
+        if (p.is_ai) return false;
+      } else if (!showAI && !showNormal) {
+        return false;
+      }
 
-    // Search filter (matches safePrompt or displayName)
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      const matchPrompt = p.safePrompt?.toLowerCase().includes(q);
-      const matchName = p.displayName?.toLowerCase().includes(q);
-      if (!matchPrompt && !matchName) return false;
-    }
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const matchPrompt = p.safePrompt?.toLowerCase().includes(q);
+        const matchName = p.displayName?.toLowerCase().includes(q);
+        if (!matchPrompt && !matchName) return false;
+      }
 
-    return true;
-  }) || [];
+      return true;
+    }) || [];
 
   const isSearching = !!searchQuery.trim();
 
@@ -106,7 +108,6 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Initialize likedByMe and savedPosts from post data
   useEffect(() => {
     if (!allPosts || !user) return;
     const myLikes = new Set<string>();
@@ -126,7 +127,6 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
     setLikedPosts(counts);
   }, [allPosts, user]);
 
-  // Sync on mount + every 60s
   useEffect(() => {
     const runSync = async () => {
       setIsSyncing(true);
@@ -152,15 +152,19 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
     try {
       const res = await fetch(`${backendUrl}/posts/${postId}/like`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ displayName: user?.fullName || '', avatarUrl: user?.imageUrl || '' }),
       });
       if (res.ok) {
         const data = await res.json();
-        setLikedPosts(prev => ({ ...prev, [postId]: data.likes }));
-        setLikedByMe(prev => {
+        setLikedPosts((prev) => ({ ...prev, [postId]: data.likes }));
+        setLikedByMe((prev) => {
           const next = new Set(prev);
-          data.liked ? next.add(postId) : next.delete(postId);
+          if (data.liked) {
+            next.add(postId);
+          } else {
+            next.delete(postId);
+          }
           return next;
         });
       }
@@ -179,15 +183,14 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
       if (res.ok) {
         const data = await res.json();
 
-        // Update local state
-        setSavedPosts(prev => {
+        setSavedPosts((prev) => {
           const next = new Set(prev);
           if (data.saved) {
             next.add(postId);
@@ -197,11 +200,10 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
           return next;
         });
 
-        // Update Dexie
         await db.posts.update(postId, {
           savedBy: data.saved
             ? [...((await db.posts.get(postId))?.savedBy || []), user.id]
-            : ((await db.posts.get(postId))?.savedBy || []).filter(id => id !== user.id)
+            : ((await db.posts.get(postId))?.savedBy || []).filter((id) => id !== user.id),
         });
       }
     } catch (err) {
@@ -223,7 +225,10 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
         await navigator.clipboard.writeText(shareUrl);
       }
     } catch {
-      try { await navigator.clipboard.writeText(shareUrl); } catch { /* silent */ }
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+      } catch {
+      }
     }
   };
 
@@ -262,18 +267,61 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
     openPostModal(post, true);
   };
 
+  const storyUsers = searchQuery.trim()
+    ? peopleResults
+    : Array.from(
+        new Map(
+          posts
+            .filter((p) => p.userId)
+            .map((p) => [
+              p.userId!,
+              {
+                userId: p.userId!,
+                displayName: p.displayName || 'Alu User',
+                avatarUrl: p.avatarUrl || '',
+                bio: '',
+              },
+            ])
+        ).values()
+      ).slice(0, 12);
+
   return (
-    <div className="w-full max-w-full md:max-w-[640px] mx-auto animate-fade-in">
-      {/* Sync indicator */}
+    <div className="w-full max-w-full md:max-w-[640px] mx-auto animate-fade-in bg-white">
       {isSyncing && (
         <div className="text-center py-2">
           <span className="text-[11px] text-alu-text-tertiary animate-pulse">Syncing...</span>
         </div>
       )}
 
-      {/* People search results (only when searching) */}
+      {storyUsers.length > 0 && (
+        <div className="border-b border-alu-border px-3 py-3 md:px-4 bg-white">
+          <div className="flex gap-3 overflow-x-auto hide-scrollbar">
+            {storyUsers.map((storyUser) => (
+              <button
+                key={storyUser.userId}
+                onClick={() => onViewUser?.(storyUser.userId)}
+                className="shrink-0 flex flex-col items-center gap-1.5 w-[72px]"
+              >
+                <div className="w-[66px] h-[66px] rounded-full bg-gradient-to-br from-[#f9ce34] via-[#ee2a7b] to-[#6228d7] p-[2px]">
+                  <div className="w-full h-full rounded-full bg-white p-[2px]">
+                    {storyUser.avatarUrl ? (
+                      <img src={storyUser.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full rounded-full bg-alu-surface flex items-center justify-center text-sm font-bold text-alu-text-secondary">
+                        {(storyUser.displayName || 'U')[0].toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <span className="text-[11px] text-alu-text truncate w-full text-center">{storyUser.displayName || 'User'}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {isSearching && (
-        <div className="px-4 py-3">
+        <div className="px-4 py-3 border-b border-alu-border bg-white">
           <h3 className="text-xs font-bold text-alu-text-tertiary uppercase tracking-wider mb-2">People</h3>
           {isSearchingPeople ? (
             <div className="flex items-center gap-2 py-2">
@@ -286,7 +334,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                 <button
                   key={u.userId}
                   onClick={() => onViewUser?.(u.userId)}
-                  className="flex-shrink-0 flex flex-col items-center gap-1.5 p-3 rounded-xl bg-alu-surface hover:bg-[var(--alu-hover)] transition-colors w-[100px]"
+                  className="flex-shrink-0 flex flex-col items-center gap-1.5 p-3 rounded-xl bg-alu-bg-secondary hover:bg-[var(--alu-hover)] transition-colors w-[100px]"
                 >
                   {u.avatarUrl ? (
                     <img src={u.avatarUrl} alt="" className="w-12 h-12 rounded-full object-cover" />
@@ -310,8 +358,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
         </div>
       )}
 
-      {/* Feed */}
-      <div className="flex flex-col md:gap-5 md:py-4">
+      <div className="flex flex-col md:py-4">
         {!allPosts && (
           <div className="py-16 text-center">
             <div className="w-8 h-8 border-2 border-[var(--alu-primary)] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
@@ -335,21 +382,16 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
 
         {posts.map((post) => {
           const key = getPostKey(post);
-          if (!key) return null; // Skip posts without _id (shouldn't happen)
+          if (!key) return null;
           return (
             <article
               key={key}
-              className="border-b border-alu-border-light bg-white md:border md:border-alu-border md:rounded-xl md:overflow-hidden md:shadow-[var(--alu-shadow-sm)]"
+              className="border-b border-alu-border bg-white md:border md:border-alu-border md:rounded-xl md:overflow-hidden md:shadow-[var(--alu-shadow-sm)] md:mb-5"
             >
-              {/* Post Header */}
-              <div className="flex items-center gap-3 px-4 py-3.5">
+              <div className="flex items-center gap-3 px-4 py-3">
                 <button onClick={() => post.userId && onViewUser?.(post.userId)} className="shrink-0">
                   {post.avatarUrl ? (
-                    <img
-                      src={post.avatarUrl}
-                      alt=""
-                      className="w-9 h-9 rounded-full object-cover"
-                    />
+                    <img src={post.avatarUrl} alt="" className="w-9 h-9 rounded-full object-cover" />
                   ) : (
                     <div className="w-9 h-9 rounded-full bg-alu-surface flex items-center justify-center text-sm font-semibold text-alu-text-secondary">
                       {(post.displayName || post.userId || 'U')[0].toUpperCase()}
@@ -358,16 +400,19 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                 </button>
                 <div className="flex-1 min-w-0 flex items-center gap-1.5">
                   <button onClick={() => post.userId && onViewUser?.(post.userId)} className="hover:underline">
-                    <span className="font-semibold text-sm text-alu-text">
-                      {post.displayName || 'Alu User'}
-                    </span>
+                    <span className="font-semibold text-[13px] text-alu-text">{post.displayName || 'Alu User'}</span>
                   </button>
-                  <span className="text-xs text-alu-text-tertiary">•</span>
-                  <span className="text-xs text-alu-text-tertiary">{timeAgo(post.timestamp)}</span>
+                  <span className="text-[11px] text-alu-text-tertiary">{timeAgo(post.timestamp)}</span>
                 </div>
+                <button className="text-alu-text-secondary hover:text-alu-text" aria-label="Post options">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="5" cy="12" r="1.7" />
+                    <circle cx="12" cy="12" r="1.7" />
+                    <circle cx="19" cy="12" r="1.7" />
+                  </svg>
+                </button>
               </div>
 
-              {/* Post Media */}
               <div
                 className="w-full aspect-square bg-alu-surface relative overflow-hidden cursor-pointer md:aspect-[4/5]"
                 onClick={() => openPostModal(post)}
@@ -386,70 +431,71 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                   <MediaItem post={post} />
                 )}
                 {post.is_ai && (
-                  <div className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded bg-black/40 text-white backdrop-blur-sm">
+                  <div className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded bg-black/45 text-white backdrop-blur-sm">
                     AI
                   </div>
                 )}
               </div>
 
-              {/* Post Actions */}
-              <div className="flex items-center justify-between px-4 py-2.5">
-                <div className="flex items-center gap-4">
+              <div className="flex items-center justify-between px-4 py-2">
+                <div className="flex items-center gap-3.5">
                   <button
                     onClick={() => toggleLike(post._id)}
-                    className={`transition-all duration-200 ${likedByMe.has(post._id) ? 'text-[var(--alu-danger)]' : 'text-alu-text-secondary hover:text-alu-text'
-                      }`}
+                    className={`transition-all duration-200 ${
+                      likedByMe.has(post._id) ? 'text-[var(--alu-danger)]' : 'text-alu-text-secondary hover:text-alu-text'
+                    }`}
                     aria-label="Like post"
                   >
-                    <HeartIcon size={20} />
+                    <HeartIcon size={23} />
                   </button>
                   <button
                     onClick={() => openComments(post)}
                     className="text-alu-text-secondary hover:text-alu-text transition-colors"
                     aria-label="Open comments"
                   >
-                    <CommentIcon size={20} />
+                    <CommentIcon size={23} />
                   </button>
                   <button
                     onClick={() => handleShare(post)}
                     className="text-alu-text-secondary hover:text-alu-text transition-colors"
                     aria-label="Share post"
                   >
-                    <ShareIcon size={20} />
+                    <ShareIcon size={22} />
                   </button>
                 </div>
                 <button
                   onClick={() => toggleSave(key)}
-                  className={`transition-all duration-200 ${savedPosts.has(key) ? 'text-[var(--alu-primary)]' : 'text-alu-text-secondary hover:text-alu-text'
-                    }`}
+                  className={`transition-all duration-200 ${
+                    savedPosts.has(key) ? 'text-[var(--alu-primary)]' : 'text-alu-text-secondary hover:text-alu-text'
+                  }`}
                 >
-                  <BookmarkIcon size={20} />
+                  <BookmarkIcon size={22} />
                 </button>
               </div>
 
               <div className="px-4 pb-3 space-y-1.5">
-                <p className="text-sm font-semibold text-alu-text">
+                <p className="text-[13px] font-semibold text-alu-text">
                   {formatCount(likedPosts[post._id] ?? post.likes ?? 0)} likes
                 </p>
 
                 {post.commentsCount && post.commentsCount > 0 ? (
                   <button
                     onClick={() => openComments(post)}
-                    className="text-sm text-alu-text-secondary hover:text-alu-text transition-colors"
+                    className="text-[13px] text-alu-text-secondary hover:text-alu-text transition-colors"
                   >
                     View all {formatCount(post.commentsCount)} comments
                   </button>
                 ) : (
                   <button
                     onClick={() => openComments(post)}
-                    className="text-sm text-alu-text-secondary hover:text-alu-text transition-colors"
+                    className="text-[13px] text-alu-text-secondary hover:text-alu-text transition-colors"
                   >
                     Add a comment...
                   </button>
                 )}
 
                 {post.safePrompt && post.safePrompt !== 'User upload' && (
-                  <p className="text-sm leading-relaxed text-alu-text">
+                  <p className="text-[13px] leading-relaxed text-alu-text">
                     <button
                       onClick={() => post.userId && onViewUser?.(post.userId)}
                       className="font-semibold mr-1 hover:underline"
