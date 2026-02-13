@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useUser, useClerk, useAuth } from '@clerk/nextjs';
 import { db, Post } from '../../db';
@@ -176,7 +176,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
     setProfileShowNormal(!profileShowNormal);
   };
 
-  const contentTabs: { key: ContentTab; label: string; icon: JSX.Element }[] = isOwnProfile
+  const contentTabs: { key: ContentTab; label: string; icon: ReactNode }[] = isOwnProfile
     ? [
         {
           key: 'posts',
