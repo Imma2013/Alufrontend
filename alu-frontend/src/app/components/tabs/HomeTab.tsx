@@ -286,7 +286,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
       ).slice(0, 12);
 
   return (
-    <div className="w-full max-w-full md:max-w-[640px] mx-auto animate-fade-in bg-white">
+    <div className="w-full max-w-full md:max-w-[470px] mx-auto animate-fade-in bg-white">
       {isSyncing && (
         <div className="text-center py-2">
           <span className="text-[11px] text-alu-text-tertiary animate-pulse">Syncing...</span>
@@ -294,15 +294,15 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
       )}
 
       {storyUsers.length > 0 && (
-        <div className="border-b border-alu-border px-3 py-3 md:px-4 bg-white">
+        <div className="border-b border-alu-border px-3 py-3 md:px-2 bg-white">
           <div className="flex gap-3 overflow-x-auto hide-scrollbar">
             {storyUsers.map((storyUser) => (
               <button
                 key={storyUser.userId}
                 onClick={() => onViewUser?.(storyUser.userId)}
-                className="shrink-0 flex flex-col items-center gap-1.5 w-[72px]"
+                className="shrink-0 flex flex-col items-center gap-1.5 w-[66px]"
               >
-                <div className="w-[66px] h-[66px] rounded-full bg-gradient-to-br from-[#f9ce34] via-[#ee2a7b] to-[#6228d7] p-[2px]">
+                <div className="w-[60px] h-[60px] rounded-full bg-gradient-to-br from-[#f9ce34] via-[#ee2a7b] to-[#6228d7] p-[2px]">
                   <div className="w-full h-full rounded-full bg-white p-[2px]">
                     {storyUser.avatarUrl ? (
                       <img src={storyUser.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
@@ -313,7 +313,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                     )}
                   </div>
                 </div>
-                <span className="text-[11px] text-alu-text truncate w-full text-center">{storyUser.displayName || 'User'}</span>
+                <span className="text-[10px] text-alu-text truncate w-full text-center">{storyUser.displayName || 'User'}</span>
               </button>
             ))}
           </div>
@@ -358,7 +358,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
         </div>
       )}
 
-      <div className="flex flex-col md:py-4">
+      <div className="flex flex-col md:py-2">
         {!allPosts && (
           <div className="py-16 text-center">
             <div className="w-8 h-8 border-2 border-[var(--alu-primary)] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
@@ -386,7 +386,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
           return (
             <article
               key={key}
-              className="border-b border-alu-border bg-white md:border md:border-alu-border md:rounded-xl md:overflow-hidden md:shadow-[var(--alu-shadow-sm)] md:mb-5"
+              className="border-b border-alu-border bg-white"
             >
               <div className="flex items-center gap-3 px-4 py-3">
                 <button onClick={() => post.userId && onViewUser?.(post.userId)} className="shrink-0">
@@ -414,7 +414,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
               </div>
 
               <div
-                className="w-full aspect-square bg-alu-surface relative overflow-hidden cursor-pointer md:aspect-[4/5]"
+                className="w-full aspect-square bg-alu-surface relative overflow-hidden cursor-pointer"
                 onClick={() => openPostModal(post)}
                 role="button"
                 tabIndex={0}
@@ -463,12 +463,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                     <ShareIcon size={22} />
                   </button>
                 </div>
-                <button
-                  onClick={() => toggleSave(key)}
-                  className={`transition-all duration-200 ${
-                    savedPosts.has(key) ? 'text-[var(--alu-primary)]' : 'text-alu-text-secondary hover:text-alu-text'
-                  }`}
-                >
+                <button onClick={() => toggleSave(key)} className={`transition-all duration-200 ${savedPosts.has(key) ? 'text-alu-text' : 'text-alu-text-secondary hover:text-alu-text'}`}>
                   <BookmarkIcon size={22} />
                 </button>
               </div>

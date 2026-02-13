@@ -363,7 +363,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
   }
 
   return (
-    <div className="w-full max-w-[600px] mx-auto animate-fade-in">
+    <div className="w-full max-w-[470px] mx-auto animate-fade-in bg-white">
       {/* Back button for other user profiles */}
       {!isOwnProfile && (
         <div className="px-4 pt-3 pb-1">
@@ -382,7 +382,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
       {/* Profile Header */}
       <div className="px-4 pt-4 pb-5 border-b border-alu-border">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[20px] font-bold text-alu-text leading-none">
+          <h2 className="text-[21px] font-bold text-alu-text leading-none">
             {isOwnProfile ? ownDisplayName : otherDisplayName}
           </h2>
           {isOwnProfile && (
@@ -396,7 +396,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
           )}
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-5">
           <div className="w-20 h-20 rounded-full bg-alu-surface flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-alu-border">
             {isOwnProfile ? (
               user?.imageUrl ? (
@@ -413,9 +413,9 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
             )}
           </div>
 
-          <div className="flex-1 grid grid-cols-3 gap-3">
+          <div className="flex-1 grid grid-cols-3 gap-2">
             <div className="text-center">
-              <span className="text-[17px] font-bold text-alu-text block leading-none">
+              <span className="text-[18px] font-bold text-alu-text block leading-none">
                 {isOwnProfile
                   ? totalPosts
                   : (otherUser?.counts?.posts ?? 0) + (otherUser?.counts?.shorts ?? 0) + (otherUser?.counts?.videos ?? 0)}
@@ -423,13 +423,13 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
               <span className="text-xs text-alu-text-tertiary">Posts</span>
             </div>
             <div className="text-center">
-              <span className="text-[17px] font-bold text-alu-text block leading-none">
+              <span className="text-[18px] font-bold text-alu-text block leading-none">
                 {isOwnProfile ? ownFollowersCount : followersCount}
               </span>
               <span className="text-xs text-alu-text-tertiary">Followers</span>
             </div>
             <div className="text-center">
-              <span className="text-[17px] font-bold text-alu-text block leading-none">
+              <span className="text-[18px] font-bold text-alu-text block leading-none">
                 {isOwnProfile ? ownFollowingCount : followingCount}
               </span>
               <span className="text-xs text-alu-text-tertiary">Following</span>
@@ -437,8 +437,8 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
           </div>
         </div>
 
-        <div className="mt-4">
-          <p className="text-sm font-semibold text-alu-text mb-0.5">{isOwnProfile ? ownDisplayName : otherDisplayName}</p>
+        <div className="mt-3.5">
+          <p className="text-[13px] font-semibold text-alu-text mb-0.5">{isOwnProfile ? ownDisplayName : otherDisplayName}</p>
           <p className="text-sm text-alu-text-secondary break-words">{isOwnProfile ? ownBio : otherBio}</p>
         </div>
 
@@ -446,16 +446,10 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
         <div className="flex gap-2 mt-4">
           {isOwnProfile ? (
             <>
-              <button
-                onClick={() => setShowEditProfile(true)}
-                className="flex-1 py-2 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors border border-alu-border"
-              >
+              <button onClick={() => setShowEditProfile(true)} className="flex-1 py-1.5 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors border border-alu-border">
                 Edit Profile
               </button>
-              <button
-                onClick={handleShareProfile}
-                className="flex-1 py-2 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors border border-alu-border"
-              >
+              <button onClick={handleShareProfile} className="flex-1 py-1.5 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors border border-alu-border">
                 {copiedLink ? 'Copied!' : 'Share Profile'}
               </button>
             </>
@@ -463,7 +457,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
             <>
               <button
                 onClick={handleFollow}
-                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
                   isFollowing
                     ? 'bg-alu-surface text-alu-text hover:bg-alu-border border border-alu-border'
                     : 'bg-[#0095f6] text-white hover:bg-[#1084d7]'
@@ -471,10 +465,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
               >
                 {isFollowing ? 'Following' : 'Follow'}
               </button>
-              <button
-                onClick={handleShareProfile}
-                className="flex-1 py-2 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors border border-alu-border"
-              >
+              <button onClick={handleShareProfile} className="flex-1 py-1.5 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors border border-alu-border">
                 {copiedLink ? 'Copied!' : 'Share Profile'}
               </button>
             </>
@@ -578,16 +569,15 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
             <button
               key={tab.key}
               onClick={() => setActiveContentTab(tab.key)}
-              className={`flex-1 min-w-[72px] py-2.5 text-[11px] font-semibold text-center transition-all duration-200 border-b-2 ${
+              className={`flex-1 min-w-[62px] py-3 text-center transition-all duration-200 border-b ${
                 activeContentTab === tab.key
                   ? 'border-alu-text text-alu-text'
                   : 'border-transparent text-alu-text-tertiary hover:text-alu-text-secondary'
               }`}
+              aria-label={tab.label}
+              title={tab.label}
             >
-              <span className="flex flex-col items-center gap-1">
-                <span>{tab.icon}</span>
-                <span>{tab.label}</span>
-              </span>
+              <span className="flex items-center justify-center">{tab.icon}</span>
             </button>
           ))}
         </div>
@@ -636,7 +626,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
                     e.stopPropagation();
                     setMenuPost(post);
                   }}
-                  className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 md:opacity-100 transition-opacity"
+                  className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   <MoreVertIcon size={20} />
                 </button>
