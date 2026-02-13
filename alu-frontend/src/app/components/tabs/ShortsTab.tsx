@@ -13,6 +13,7 @@ interface ShortsTabProps {
 }
 
 export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
+  const MAX_CAPTION_CHARS = 95;
   const { getToken } = useAuth();
   const { user } = useUser();
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -23,6 +24,7 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
   const [isPaused, setIsPaused] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [expandedCaptions, setExpandedCaptions] = useState<Set<string>>(new Set());
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
   const touchStartTime = useRef(0);
@@ -214,6 +216,12 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
   if (!short) return null;
 
   const shortKey = short._id;
+  const rawCaption = short.safePrompt && short.safePrompt !== 'User upload' ? short.safePrompt : '';
+  const isCaptionLong = rawCaption.length > MAX_CAPTION_CHARS;
+  const isCaptionExpanded = expandedCaptions.has(shortKey);
+  const visibleCaption = isCaptionLong && !isCaptionExpanded
+    ? `${rawCaption.slice(0, MAX_CAPTION_CHARS).trimEnd()}...`
+    : rawCaption;
 
   return (
     <div
@@ -246,7 +254,7 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
         >
           {/* Media content — tap to pause/play */}
           <div className="absolute inset-0" ref={videoContainerRef} onClick={handleTapVideo}>
-            <MediaItem post={short} />
+            <MediaItem post={short} videoControls={false} autoPlayVideo />
           </div>
 
           {/* Pause indicator */}
@@ -275,8 +283,26 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
               )}
               <span className="text-white font-semibold text-sm">{short.displayName || 'Alu User'}</span>
             </div>
-            {short.safePrompt && short.safePrompt !== 'User upload' && (
-              <p className="text-white text-sm leading-snug">{short.safePrompt}</p>
+            {rawCaption && (
+              <p className="text-white text-sm leading-snug pointer-events-auto">
+                {visibleCaption}{' '}
+                {isCaptionLong && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedCaptions(prev => {
+                        const next = new Set(prev);
+                        if (next.has(shortKey)) next.delete(shortKey);
+                        else next.add(shortKey);
+                        return next;
+                      });
+                    }}
+                    className="font-semibold text-white/85 hover:text-white transition-colors"
+                  >
+                    {isCaptionExpanded ? 'less' : 'more'}
+                  </button>
+                )}
+              </p>
             )}
             {short.is_ai && (
               <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded bg-white/20 text-white backdrop-blur-sm">AI</span>
@@ -285,6 +311,18 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
 
           {/* Right side actions (TikTok style) */}
           <div className="absolute bottom-20 right-3 flex flex-col items-center gap-5">
+            <button className="relative" onClick={(e) => e.stopPropagation()} aria-label="Creator profile">
+              {short.avatarUrl ? (
+                <img src={short.avatarUrl} alt="" className="w-11 h-11 rounded-full object-cover border-2 border-white/85" />
+              ) : (
+                <div className="w-11 h-11 rounded-full bg-white/20 backdrop-blur-sm border-2 border-white/85 flex items-center justify-center text-white text-xs font-bold">
+                  {(short.displayName || short.userId || 'U')[0].toUpperCase()}
+                </div>
+              )}
+              <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-[var(--alu-primary)] text-white text-xs leading-5 text-center font-bold">
+                +
+              </span>
+            </button>
             <button onClick={(e) => { e.stopPropagation(); toggleLike(); }} className="flex flex-col items-center gap-1">
               <div className={`w-10 h-10 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center transition-colors ${liked.has(shortKey) ? 'text-red-400' : 'text-white'}`}>
                 <HeartIcon size={22} />

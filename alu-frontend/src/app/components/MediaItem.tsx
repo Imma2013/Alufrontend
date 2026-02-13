@@ -5,7 +5,13 @@ import { getFileUrl } from '../fileSystem';
 import { Post } from '../db';
 import ImageCarousel from './ImageCarousel';
 
-export default function MediaItem({ post }: { post: Post }) {
+interface MediaItemProps {
+  post: Post;
+  videoControls?: boolean;
+  autoPlayVideo?: boolean;
+}
+
+export default function MediaItem({ post, videoControls = true, autoPlayVideo = false }: MediaItemProps) {
   const [localUrl, setLocalUrl] = useState<string | null>(null);
   const [isRemote, setIsRemote] = useState(false);
 
@@ -60,7 +66,14 @@ export default function MediaItem({ post }: { post: Post }) {
       {post.mediaType === 'image' ? (
         <img src={localUrl || ''} alt={post.safePrompt} className="object-cover w-full h-full" />
       ) : (
-        <video src={localUrl || ''} controls playsInline className="object-cover w-full h-full" />
+        <video
+          src={localUrl || ''}
+          controls={videoControls}
+          autoPlay={autoPlayVideo}
+          loop={autoPlayVideo}
+          playsInline
+          className="object-cover w-full h-full"
+        />
       )}
     </>
   );

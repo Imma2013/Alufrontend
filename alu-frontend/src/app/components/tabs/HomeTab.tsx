@@ -263,7 +263,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
   };
 
   return (
-    <div className="w-full max-w-full md:max-w-[700px] mx-auto animate-fade-in">
+    <div className="w-full max-w-full md:max-w-[640px] mx-auto animate-fade-in">
       {/* Sync indicator */}
       {isSyncing && (
         <div className="text-center py-2">
@@ -311,7 +311,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
       )}
 
       {/* Feed */}
-      <div className="flex flex-col">
+      <div className="flex flex-col md:gap-5 md:py-4">
         {!allPosts && (
           <div className="py-16 text-center">
             <div className="w-8 h-8 border-2 border-[var(--alu-primary)] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
@@ -337,9 +337,12 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
           const key = getPostKey(post);
           if (!key) return null; // Skip posts without _id (shouldn't happen)
           return (
-            <article key={key} className="border-b border-alu-border-light">
+            <article
+              key={key}
+              className="border-b border-alu-border-light bg-white md:border md:border-alu-border md:rounded-xl md:overflow-hidden md:shadow-[var(--alu-shadow-sm)]"
+            >
               {/* Post Header */}
-              <div className="flex items-center gap-3 px-4 py-3">
+              <div className="flex items-center gap-3 px-4 py-3.5">
                 <button onClick={() => post.userId && onViewUser?.(post.userId)} className="shrink-0">
                   {post.avatarUrl ? (
                     <img
@@ -353,19 +356,20 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                     </div>
                   )}
                 </button>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 flex items-center gap-1.5">
                   <button onClick={() => post.userId && onViewUser?.(post.userId)} className="hover:underline">
                     <span className="font-semibold text-sm text-alu-text">
                       {post.displayName || 'Alu User'}
                     </span>
                   </button>
-                  <span className="text-xs text-alu-text-tertiary block">{timeAgo(post.timestamp)}</span>
+                  <span className="text-xs text-alu-text-tertiary">•</span>
+                  <span className="text-xs text-alu-text-tertiary">{timeAgo(post.timestamp)}</span>
                 </div>
               </div>
 
               {/* Post Media */}
               <div
-                className="w-full aspect-[4/3] bg-alu-surface relative overflow-hidden cursor-pointer"
+                className="w-full aspect-square bg-alu-surface relative overflow-hidden cursor-pointer md:aspect-[4/5]"
                 onClick={() => openPostModal(post)}
                 role="button"
                 tabIndex={0}
@@ -393,21 +397,23 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                 <div className="flex items-center gap-4">
                   <button
                     onClick={() => toggleLike(post._id)}
-                    className={`flex items-center gap-1.5 transition-all duration-200 ${likedByMe.has(post._id) ? 'text-[var(--alu-danger)]' : 'text-alu-text-secondary hover:text-alu-text'
+                    className={`transition-all duration-200 ${likedByMe.has(post._id) ? 'text-[var(--alu-danger)]' : 'text-alu-text-secondary hover:text-alu-text'
                       }`}
+                    aria-label="Like post"
                   >
                     <HeartIcon size={20} />
-                    <span className="text-xs font-medium">{likedPosts[post._id] ?? post.likes ?? 0}</span>
                   </button>
-                  <button onClick={() => openComments(post)} className="flex items-center gap-1.5 text-alu-text-secondary hover:text-alu-text transition-colors">
+                  <button
+                    onClick={() => openComments(post)}
+                    className="text-alu-text-secondary hover:text-alu-text transition-colors"
+                    aria-label="Open comments"
+                  >
                     <CommentIcon size={20} />
-                    {(post.commentsCount ?? 0) > 0 && (
-                      <span className="text-xs font-medium">{formatCount(post.commentsCount ?? 0)}</span>
-                    )}
                   </button>
                   <button
                     onClick={() => handleShare(post)}
-                    className="flex items-center gap-1.5 text-alu-text-secondary hover:text-alu-text transition-colors"
+                    className="text-alu-text-secondary hover:text-alu-text transition-colors"
+                    aria-label="Share post"
                   >
                     <ShareIcon size={20} />
                   </button>
@@ -421,12 +427,39 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                 </button>
               </div>
 
-              {/* Caption — below media like YouTube/Instagram */}
-              {post.safePrompt && post.safePrompt !== 'User upload' && (
-                <div className="px-4 pb-3">
-                  <p className="text-sm leading-relaxed text-alu-text">{post.safePrompt}</p>
-                </div>
-              )}
+              <div className="px-4 pb-3 space-y-1.5">
+                <p className="text-sm font-semibold text-alu-text">
+                  {formatCount(likedPosts[post._id] ?? post.likes ?? 0)} likes
+                </p>
+
+                {post.commentsCount && post.commentsCount > 0 ? (
+                  <button
+                    onClick={() => openComments(post)}
+                    className="text-sm text-alu-text-secondary hover:text-alu-text transition-colors"
+                  >
+                    View all {formatCount(post.commentsCount)} comments
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => openComments(post)}
+                    className="text-sm text-alu-text-secondary hover:text-alu-text transition-colors"
+                  >
+                    Add a comment...
+                  </button>
+                )}
+
+                {post.safePrompt && post.safePrompt !== 'User upload' && (
+                  <p className="text-sm leading-relaxed text-alu-text">
+                    <button
+                      onClick={() => post.userId && onViewUser?.(post.userId)}
+                      className="font-semibold mr-1 hover:underline"
+                    >
+                      {post.displayName || 'Alu User'}
+                    </button>
+                    {post.safePrompt}
+                  </p>
+                )}
+              </div>
             </article>
           );
         })}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAuth, useUser } from '@clerk/nextjs';
+import { HeartIcon } from './icons';
 
 interface CommentData {
     _id: string;
@@ -31,7 +32,9 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
     const [loading, setLoading] = useState(false);
     const [text, setText] = useState('');
     const [submitting, setSubmitting] = useState(false);
-    const [replyingTo, setReplyingTo] = useState<CommentData | null>(null);
+    const [activeReplyCommentId, setActiveReplyCommentId] = useState<string | null>(null);
+    const [replyText, setReplyText] = useState('');
+    const [submittingReplyFor, setSubmittingReplyFor] = useState<string | null>(null);
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [uploadingImage, setUploadingImage] = useState(false);
@@ -58,6 +61,8 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
     useEffect(() => {
         if (!isOpen || !postId) return;
         setLoading(true);
+        setActiveReplyCommentId(null);
+        setReplyText('');
         fetch(`${backendUrl}/posts/${postId}/comments`)
             .then(res => res.ok ? res.json() : { comments: [] })
             .then(data => setComments(data.comments || []))
@@ -143,30 +148,20 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({
-                    text: text.trim() || '📷',
+                    text: text.trim() || 'image',
                     displayName: user?.fullName || '',
                     avatarUrl: user?.imageUrl || '',
-                    parentCommentId: replyingTo?._id || null,
+                    parentCommentId: null,
                     imageUrl,
                 }),
             });
 
             if (res.ok) {
                 const data = await res.json();
-                if (replyingTo) {
-                    setComments(prev => prev.map(c =>
-                        c._id === replyingTo._id
-                            ? { ...c, replies: [data.comment, ...(c.replies || [])], replyCount: (c.replyCount || 0) + 1 }
-                            : c
-                    ));
-                    setExpandedReplies(prev => new Set(prev).add(replyingTo._id));
-                } else {
-                    setComments(prev => [{ ...data.comment, replies: [], replyCount: 0 }, ...prev]);
-                }
+                setComments(prev => [{ ...data.comment, replies: [], replyCount: 0 }, ...prev]);
                 setText('');
                 setImageFile(null);
                 setImagePreview(null);
-                setReplyingTo(null);
             }
         } finally {
             setSubmitting(false);
@@ -230,6 +225,41 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
             }
         } catch (err) {
             console.error('Like error:', err);
+        }
+    };
+
+    const handleReplySubmit = async (parentCommentId: string) => {
+        if (!replyText.trim() || submittingReplyFor) return;
+        const token = await getToken();
+        if (!token) return;
+
+        setSubmittingReplyFor(parentCommentId);
+        try {
+            const res = await fetch(`${backendUrl}/posts/${postId}/comments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({
+                    text: replyText.trim(),
+                    displayName: user?.fullName || '',
+                    avatarUrl: user?.imageUrl || '',
+                    parentCommentId,
+                    imageUrl: '',
+                }),
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setComments(prev => prev.map(c =>
+                    c._id === parentCommentId
+                        ? { ...c, replies: [data.comment, ...(c.replies || [])], replyCount: (c.replyCount || 0) + 1 }
+                        : c
+                ));
+                setExpandedReplies(prev => new Set(prev).add(parentCommentId));
+                setReplyText('');
+                setActiveReplyCommentId(null);
+            }
+        } finally {
+            setSubmittingReplyFor(null);
         }
     };
 
@@ -305,16 +335,32 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
                         {c.imageUrl && (
                             <img src={c.imageUrl} alt="" className="mt-2 max-w-[200px] rounded-lg" />
                         )}
-                        <div className="flex items-center gap-3 mt-1.5">
+                        <div className="flex items-center gap-3 mt-2">
                             <button
                                 onClick={() => handleLike(c._id, isReply, parentId)}
-                                className="text-xs font-semibold text-alu-text-tertiary hover:text-alu-text transition-colors"
+                                className={`inline-flex items-center gap-1 text-xs font-semibold transition-colors ${isLiked ? 'text-[#ed4956]' : 'text-alu-text-tertiary hover:text-alu-text'}`}
+                                aria-label="Like comment"
                             >
-                                {c.likes > 0 ? `${c.likes} ${c.likes === 1 ? 'like' : 'likes'}` : 'Like'}
+                                {isLiked ? (
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="shrink-0">
+                                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                                    </svg>
+                                ) : (
+                                    <HeartIcon size={14} />
+                                )}
+                                <span>{c.likes > 0 ? c.likes : ''}</span>
                             </button>
                             {!isReply && (
                                 <button
-                                    onClick={() => setReplyingTo(c)}
+                                    onClick={() => {
+                                        if (activeReplyCommentId === c._id) {
+                                            setActiveReplyCommentId(null);
+                                            setReplyText('');
+                                        } else {
+                                            setActiveReplyCommentId(c._id);
+                                            setReplyText('');
+                                        }
+                                    }}
                                     className="text-xs font-semibold text-alu-text-tertiary hover:text-alu-text transition-colors"
                                 >
                                     Reply
@@ -330,12 +376,28 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
                             )}
                         </div>
                     </div>
-                    {isLiked && (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="#ed4956" className="shrink-0 mt-1">
-                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                        </svg>
-                    )}
                 </div>
+
+                {!isReply && activeReplyCommentId === c._id && (
+                    <div className="ml-10 mt-2 flex items-center gap-2">
+                        <input
+                            type="text"
+                            value={replyText}
+                            onChange={(e) => setReplyText(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleReplySubmit(c._id)}
+                            placeholder={`Reply to ${c.displayName || 'User'}...`}
+                            className="flex-1 h-9 px-3 bg-alu-surface rounded-full text-xs text-alu-text placeholder:text-alu-text-tertiary outline-none focus:ring-2 focus:ring-[var(--alu-primary-glow)]"
+                        />
+                        <button
+                            onClick={() => handleReplySubmit(c._id)}
+                            disabled={submittingReplyFor === c._id || !replyText.trim()}
+                            className="h-9 px-3 rounded-full text-xs font-semibold text-white disabled:opacity-50 transition-opacity"
+                            style={{ background: 'linear-gradient(135deg, var(--alu-primary), var(--alu-primary-light))' }}
+                        >
+                            {submittingReplyFor === c._id ? '...' : 'Reply'}
+                        </button>
+                    </div>
+                )}
 
                 {hasReplies && (
                     <button
@@ -409,26 +471,6 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
 
                     {/* Comment input */}
                     <div className="border-t border-alu-border px-4 py-3 bg-alu-bg">
-                        {replyingTo && (
-                            <div className="flex items-center justify-between mb-2 px-3 py-2 bg-alu-surface rounded-lg">
-                                <span className="text-xs text-alu-text-secondary">
-                                    Replying to <span className="font-semibold">{replyingTo.displayName}</span>
-                                </span>
-                                <button
-                                    onClick={() => {
-                                        setReplyingTo(null);
-                                        setImageFile(null);
-                                        setImagePreview(null);
-                                    }}
-                                    className="text-alu-text-tertiary hover:text-alu-text"
-                                >
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                                    </svg>
-                                </button>
-                            </div>
-                        )}
-
                         {imagePreview && (
                             <div className="mb-2 relative inline-block">
                                 <img src={imagePreview} alt="Preview" className="max-w-[100px] rounded-lg" />
@@ -530,26 +572,6 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
 
                 {/* Comment input */}
                 <div className="border-t border-alu-border px-4 py-4 bg-alu-bg">
-                    {replyingTo && (
-                        <div className="flex items-center justify-between mb-3 px-3 py-2 bg-alu-surface rounded-lg">
-                            <span className="text-xs text-alu-text-secondary">
-                                Replying to <span className="font-semibold">{replyingTo.displayName}</span>
-                            </span>
-                            <button
-                                onClick={() => {
-                                    setReplyingTo(null);
-                                    setImageFile(null);
-                                    setImagePreview(null);
-                                }}
-                                className="text-alu-text-tertiary hover:text-alu-text"
-                            >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                                </svg>
-                            </button>
-                        </div>
-                    )}
-
                     {imagePreview && (
                         <div className="mb-3 relative inline-block">
                             <img src={imagePreview} alt="Preview" className="max-w-[120px] rounded-lg" />

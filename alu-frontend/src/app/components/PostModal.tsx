@@ -86,6 +86,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
       if (commentsSectionRef.current) {
         commentsSectionRef.current.scrollTop = 0;
       }
+      commentInputRef.current?.focus();
     }, 120);
     return () => clearTimeout(timer);
   }, [openComments, post._id]);
@@ -438,9 +439,9 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-stretch md:items-center justify-center p-0 md:p-4 overflow-hidden" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] bg-black/65 flex items-stretch md:items-center justify-center p-0 md:p-4 overflow-hidden" onClick={onClose}>
       <div
-        className="relative bg-white w-full h-[100dvh] md:h-[88vh] md:max-h-[88vh] md:max-w-[1080px] rounded-none md:rounded-2xl overflow-hidden animate-fade-in flex flex-col md:flex-row"
+        className="relative bg-white w-full h-[100dvh] md:h-[90vh] md:max-h-[90vh] md:max-w-[1120px] rounded-none md:rounded-2xl overflow-hidden animate-fade-in flex flex-col md:flex-row"
         onClick={(e) => e.stopPropagation()}
       >
         <button
