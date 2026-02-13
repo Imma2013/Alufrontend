@@ -406,7 +406,9 @@ export default function CreateTab() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <ZapIcon size={18} className="text-[var(--alu-primary)]" />
+                    <span className="text-[var(--alu-primary)]">
+                      <ZapIcon size={18} />
+                    </span>
                     <span className="text-sm font-bold text-alu-text">Shorts Remaining</span>
                   </div>
                   <p className="text-xs text-alu-text-secondary">
