@@ -51,6 +51,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
   const [copiedLink, setCopiedLink] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [menuPost, setMenuPost] = useState<Post | null>(null);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [deletingPost, setDeletingPost] = useState<Post | null>(null);
@@ -295,25 +296,36 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
     const token = await getToken();
     if (!token) return;
     try {
-      // These priceIds need to be created in Stripe Dashboard
-      // For now, use env vars or placeholder
-      const priceId = mode === 'subscription'
-        ? (process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || 'price_pro_monthly')
-        : (process.env.NEXT_PUBLIC_STRIPE_CREDIT_PRICE_ID || 'price_credit_pack');
+      setUpgradeError(null);
+      const proPriceId = process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID;
+      const creditPriceId = process.env.NEXT_PUBLIC_STRIPE_CREDIT_PRICE_ID;
+      const priceId = mode === 'subscription' ? proPriceId : creditPriceId;
+      if (!priceId) {
+        throw new Error(
+          mode === 'subscription'
+            ? 'Stripe Pro price is not configured.'
+            : 'Stripe credit pack price is not configured.'
+        );
+      }
 
       const res = await fetch(`${backendUrl}/payments/create-checkout-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ priceId, mode }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) {
-          window.location.href = data.url;
-        }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Unable to start checkout session.');
+      }
+      if (data.url) {
+        window.location.assign(data.url);
+      } else {
+        throw new Error('Checkout URL missing from server response.');
       }
     } catch (err) {
       console.error('Checkout failed:', err);
+      const message = err instanceof Error ? err.message : 'Checkout failed.';
+      setUpgradeError(message);
     }
   };
 
@@ -448,7 +460,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
       {isOwnProfile && showSettings && (
         <div className="mx-4 mb-4 p-2 bg-alu-surface rounded-xl animate-fade-in">
           <button
-            onClick={() => { setShowUpgradeModal(true); setShowSettings(false); }}
+            onClick={() => { setUpgradeError(null); setShowUpgradeModal(true); setShowSettings(false); }}
             className="w-full text-left px-3 py-2.5 text-sm text-alu-text hover:bg-alu-hover rounded-lg transition-colors flex items-center gap-2.5"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -504,6 +516,9 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
                 <span className="block text-xs font-normal text-alu-text-secondary mt-0.5">+50 images, +20 shorts, +10 videos</span>
               </button>
             </div>
+            {upgradeError && (
+              <p className="mt-3 text-xs text-red-600 text-center">{upgradeError}</p>
+            )}
 
             <button
               onClick={() => setShowUpgradeModal(false)}
