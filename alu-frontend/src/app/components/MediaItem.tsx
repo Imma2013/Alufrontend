@@ -58,9 +58,9 @@ export default function MediaItem({ post }: { post: Post }) {
   return (
     <>
       {post.mediaType === 'image' ? (
-        <img src={localUrl} alt={post.safePrompt} className="object-cover w-full h-full" />
+        <img src={localUrl || ''} alt={post.safePrompt} className="object-cover w-full h-full" />
       ) : (
-        <video src={localUrl} controls playsInline className="object-cover w-full h-full" />
+        <video src={localUrl || ''} controls playsInline className="object-cover w-full h-full" />
       )}
     </>
   );
