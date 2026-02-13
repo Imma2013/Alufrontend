@@ -240,7 +240,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
   };
 
   return (
-    <div className="w-full max-w-full md:max-w-[950px] mx-auto animate-fade-in">
+    <div className="w-full max-w-full md:max-w-[750px] mx-auto animate-fade-in">
       {/* Sync indicator */}
       {isSyncing && (
         <div className="text-center py-2">
@@ -340,8 +340,8 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                 </div>
               </div>
 
-              {/* Post Media — click to expand */}
-              <div className="w-full aspect-[4/3] bg-alu-surface relative overflow-hidden cursor-pointer" onClick={() => setSelectedPost(post)}>
+              {/* Post Media */}
+              <div className="w-full aspect-[4/3] bg-alu-surface relative overflow-hidden">
                 <MediaItem post={post} />
                 {post.is_ai && (
                   <div className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded bg-black/40 text-white backdrop-blur-sm">
@@ -393,9 +393,6 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
           );
         })}
       </div>
-
-      {/* Post expand modal */}
-      {selectedPost && <PostModal post={selectedPost} onClose={() => setSelectedPost(null)} onViewUser={onViewUser} />}
 
       {/* Comments drawer */}
       <CommentsDrawer

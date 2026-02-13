@@ -53,6 +53,8 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [menuPost, setMenuPost] = useState<Post | null>(null);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
+  const [deletingPost, setDeletingPost] = useState<Post | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Other user state
   const [otherUser, setOtherUser] = useState<OtherUserProfile | null>(null);
@@ -257,6 +259,35 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
     // Force re-render by removing from local state if viewing other user
     if (!isOwnProfile) {
       setOtherUserPosts(prev => prev.filter(p => p._id !== postId));
+    }
+  };
+
+  const handleDeletePost = async () => {
+    if (!deletingPost) return;
+    setIsDeleting(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+      const res = await fetch(`${backendUrl}/posts/${deletingPost._id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        // Remove from local Dexie
+        try { await db.posts.delete(deletingPost._id); } catch { /* ok */ }
+        // Remove from other user posts if applicable
+        if (!isOwnProfile) {
+          setOtherUserPosts(prev => prev.filter(p => p._id !== deletingPost._id));
+        }
+      }
+    } catch (err) {
+      console.error('Delete failed:', err);
+    } finally {
+      setIsDeleting(false);
+      setDeletingPost(null);
     }
   };
 
@@ -586,7 +617,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
               setTimeout(() => setCopiedLink(false), 2000);
             } catch { /* silent */ }
           }}
-          onDelete={() => setSelectedPost(menuPost)}
+          onDelete={() => { setDeletingPost(menuPost); setMenuPost(null); }}
         />
       )}
 
@@ -600,6 +631,31 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
             setEditingPost(null);
           }}
         />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deletingPost && (
+        <div className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center" onClick={() => setDeletingPost(null)}>
+          <div className="bg-white dark:bg-alu-bg rounded-2xl p-6 max-w-[320px] mx-4 text-center" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-alu-text mb-2">Delete this post?</h3>
+            <p className="text-sm text-alu-text-secondary mb-4">This action cannot be undone.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setDeletingPost(null)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeletePost}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Copied Link Toast */}

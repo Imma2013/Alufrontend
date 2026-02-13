@@ -56,14 +56,15 @@ export default function CreateTab() {
   }, [success]); // re-fetch after successful generation
 
   // Dynamic types based on mode
-  const types: { key: ContentType; label: string; desc: string; icon: React.ReactNode }[] = mode === 'ai'
+  const types: { key: ContentType; label: string; desc: string; icon: React.ReactNode; videoType?: 'short' | 'long' }[] = mode === 'ai'
     ? [
         { key: 'image', label: 'Image', desc: 'AI generated', icon: <ImageIcon size={24} /> },
-        { key: 'short', label: 'Shorts', desc: 'Pro only', icon: <ZapIcon size={24} /> },
+        { key: 'short', label: 'Shorts', desc: 'Pro only', icon: <ZapIcon size={24} />, videoType: 'short' },
       ]
     : [
         { key: 'image', label: 'Image', desc: 'Manual upload', icon: <ImageIcon size={24} /> },
-        { key: 'short', label: 'Video', desc: 'Short format', icon: <FilmIcon size={24} /> },
+        { key: 'short', label: 'Short Video', desc: 'Under 1 minute', icon: <ZapIcon size={24} />, videoType: 'short' },
+        { key: 'video', label: 'Long Video', desc: 'YouTube-style', icon: <FilmIcon size={24} />, videoType: 'long' },
       ];
 
   const privacyOptions = [
