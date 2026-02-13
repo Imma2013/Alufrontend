@@ -83,7 +83,6 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
   useEffect(() => {
     if (!openComments) return;
     const timer = setTimeout(() => {
-      commentsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       commentInputRef.current?.focus();
     }, 120);
     return () => clearTimeout(timer);
@@ -439,7 +438,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
   return (
     <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-stretch md:items-center justify-center p-0 md:p-4 overflow-hidden" onClick={onClose}>
       <div
-        className="relative bg-white w-full h-[100dvh] md:h-[90vh] md:max-h-[90vh] md:max-w-[950px] rounded-none md:rounded-2xl overflow-hidden animate-fade-in flex flex-col md:flex-row"
+        className="relative bg-white w-full h-[100dvh] md:h-[88vh] md:max-h-[88vh] md:max-w-[1080px] rounded-none md:rounded-2xl overflow-hidden animate-fade-in flex flex-col md:flex-row"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -452,7 +451,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
           </svg>
         </button>
 
-        <div className="w-full md:w-[60%] h-[44dvh] md:h-auto bg-black flex items-center justify-center relative flex-shrink-0" style={{ minHeight: '240px' }}>
+        <div className="w-full md:w-[62%] h-[44dvh] md:h-full bg-black flex items-center justify-center relative flex-shrink-0" style={{ minHeight: '240px' }}>
           {/* Loading spinner */}
           {!mediaLoaded && (
             <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
@@ -495,7 +494,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
           )}
         </div>
 
-        <div ref={modalContentRef} className="w-full md:w-[40%] flex-1 flex flex-col max-h-[56dvh] md:max-h-[90vh] overflow-y-auto">
+        <div ref={modalContentRef} className="w-full md:w-[38%] flex-1 flex flex-col max-h-[56dvh] md:max-h-full overflow-y-hidden">
           <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--alu-border)] shrink-0">
             <button onClick={handleViewUser} className="shrink-0">
               {post.avatarUrl ? (
@@ -567,7 +566,6 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
               </button>
               <button
                 onClick={() => {
-                  commentsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                   commentInputRef.current?.focus();
                 }}
                 className="text-alu-text-secondary hover:text-alu-text transition-colors"
