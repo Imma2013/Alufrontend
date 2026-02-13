@@ -130,32 +130,45 @@ async function generateContent(userId, prompt, type, isLongVideo = false, visibi
 
   try {
     if (type === 'image') {
-      // --- IMAGE: NanoBanana Flash (Gemini 2.0 Flash Exp) ---
-      modelName = 'gemini-2.0-flash-exp';
-      provider = 'NanoBanana Flash';
-      console.log(`Dispatching to ${provider}...`);
+      // --- IMAGE: Gemini image models (fallback chain) ---
+      const imageModels = [
+        { id: 'gemini-2.0-flash-preview-image-generation', name: 'NanoBanana Flash' },
+        { id: 'gemini-2.0-flash', name: 'Gemini Flash 2.0' },
+      ];
 
-      const imageResponse = await ai.models.generateContent({
-        model: modelName,
-        contents: safePrompt,
-        config: {
-          responseModalities: ['IMAGE'],
-        },
-      });
+      let imageError = null;
+      for (const imageModel of imageModels) {
+        try {
+          modelName = imageModel.id;
+          provider = imageModel.name;
+          console.log(`Dispatching to ${provider} (${modelName})...`);
 
-      // Extract image from response parts
-      const parts = imageResponse.candidates?.[0]?.content?.parts || [];
-      const imagePart = parts.find(p => p.inlineData?.mimeType?.startsWith('image/'));
+          const imageResponse = await ai.models.generateContent({
+            model: modelName,
+            contents: safePrompt,
+            config: {
+              responseModalities: ['IMAGE'],
+            },
+          });
 
-      if (!imagePart) {
-        throw new Error('NanoBanana Flash returned no image data.');
+          const parts = imageResponse.candidates?.[0]?.content?.parts || [];
+          const imagePart = parts.find(p => p.inlineData?.mimeType?.startsWith('image/'));
+          if (!imagePart) throw new Error(`${imageModel.name} returned no image data.`);
+
+          const base64Image = imagePart.inlineData.data;
+          contentUrl = await uploadBase64ToCloudinary(base64Image, userId);
+          console.log(`Image uploaded to Cloudinary: ${contentUrl}`);
+          imageError = null;
+          break;
+        } catch (err) {
+          console.error(`${imageModel.name} failed:`, err.message);
+          imageError = err;
+        }
       }
 
-      const base64Image = imagePart.inlineData.data;
-
-      // Upload base64 to Cloudinary to get a URL
-      contentUrl = await uploadBase64ToCloudinary(base64Image, userId);
-      console.log(`Image uploaded to Cloudinary: ${contentUrl}`);
+      if (imageError) {
+        throw new Error(`All image models failed. Last error: ${imageError.message}`);
+      }
 
     } else if (type === 'video' && !isLongVideo) {
       // --- SHORT VIDEO: Try Veo 3.1, fallback to Veo 2.0 ---

@@ -358,13 +358,13 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
 
     if (!isOpen) return null;
 
-    // Mobile variant: Full-screen bottom sheet
+    // Mobile variant: Instagram-like comments sheet
     if (actualVariant === 'mobile') {
         return (
-            <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="fixed inset-0 z-[120] bg-black/55 backdrop-blur-[2px] animate-fade-in">
                 <div
                     ref={drawerRef}
-                    className="fixed inset-0 bg-alu-bg flex flex-col animate-slide-up"
+                    className="fixed left-0 right-0 bottom-0 h-[78dvh] max-h-[78dvh] bg-alu-bg rounded-t-2xl border-t border-alu-border flex flex-col animate-slide-up"
                     onTouchStart={handleTouchStart}
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
@@ -385,7 +385,7 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
                     </div>
 
                     {/* Comments list */}
-                    <div className="flex-1 overflow-y-auto px-4 py-4">
+                    <div className="flex-1 overflow-y-auto px-4 py-3">
                         {loading ? (
                             <div className="flex justify-center py-12">
                                 <div className="w-8 h-8 border-2 border-[var(--alu-primary)] border-t-transparent rounded-full animate-spin" />

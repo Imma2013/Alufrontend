@@ -9,6 +9,7 @@ import MediaItem from '../MediaItem';
 import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon } from '../icons';
 import PostModal from '../PostModal';
 import ImageCarousel from '../ImageCarousel';
+import CommentsDrawer from '../CommentsDrawer';
 
 interface UserResult {
   userId: string;
@@ -33,6 +34,8 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [openCommentsOnModal, setOpenCommentsOnModal] = useState(false);
+  const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
   const [peopleResults, setPeopleResults] = useState<UserResult[]>([]);
   const [isSearchingPeople, setIsSearchingPeople] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,6 +98,13 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
   }) || [];
 
   const isSearching = !!searchQuery.trim();
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Initialize likedByMe and savedPosts from post data
   useEffect(() => {
@@ -244,6 +254,14 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
     setOpenCommentsOnModal(openComments);
   };
 
+  const openComments = (post: Post) => {
+    if (isMobile) {
+      setCommentsPostId(post._id);
+      return;
+    }
+    openPostModal(post, true);
+  };
+
   return (
     <div className="w-full max-w-full md:max-w-[750px] mx-auto animate-fade-in">
       {/* Sync indicator */}
@@ -381,7 +399,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                     <HeartIcon size={20} />
                     <span className="text-xs font-medium">{likedPosts[post._id] ?? post.likes ?? 0}</span>
                   </button>
-                  <button onClick={() => openPostModal(post, true)} className="flex items-center gap-1.5 text-alu-text-secondary hover:text-alu-text transition-colors">
+                  <button onClick={() => openComments(post)} className="flex items-center gap-1.5 text-alu-text-secondary hover:text-alu-text transition-colors">
                     <CommentIcon size={20} />
                     {(post.commentsCount ?? 0) > 0 && (
                       <span className="text-xs font-medium">{formatCount(post.commentsCount ?? 0)}</span>
@@ -425,6 +443,12 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
           openComments={openCommentsOnModal}
         />
       )}
+      <CommentsDrawer
+        postId={commentsPostId || ''}
+        isOpen={!!commentsPostId}
+        onClose={() => setCommentsPostId(null)}
+        variant="mobile"
+      />
     </div>
   );
 }
