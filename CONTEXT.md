@@ -638,10 +638,103 @@ Merged uncommitted work from another Claude session that built core social featu
 
 **Build:** Frontend passes `npm run build` clean
 
+### 2026-02-12: UI/UX Polish + Security Hardening — Session 12 (Claude Opus)
+
+**Frontend UX Fixes:**
+- **Feed width reduced:** HomeTab max-width changed from 950px to 750px (user feedback: too wide, reduce by 200px)
+- **Comments behavior fixed:** Removed onClick from media div that was opening PostModal. Comments now properly open CommentsDrawer side panel instead of full modal.
+- **Long Video option added:** CreateTab manual upload now has 3 types: Image, Short Video (under 1 min), Long Video (YouTube-style)
+- **Delete from profile fixed:** ProfileTab PostOptionsMenu now properly deletes posts instead of opening PostModal. Added confirmation dialog with API call to `DELETE /posts/:id`.
+- **PostModal removed from HomeTab:** Eliminated duplicate modal system, CommentsDrawer is now primary comments interface
+
+**Backend Security Hardening:**
+- **Rate limiting added:** Installed `express-rate-limit` package
+  - Global limiter: 100 requests per 15 minutes per IP
+  - Upload limiter: 10 requests per minute per IP
+  - Generate limiter: 20 requests per hour per IP
+- **MongoDB injection prevention:** Installed `express-mongo-sanitize` package
+  - Replaces `$` and `.` with `_` in req.body/query/params
+  - Logs suspicious sanitization attempts with IP address
+- **Upload security:** Changed from `upload.any()` to `upload.array('files', 5)` with MIME type validation
+  - Allowed types: image/jpeg, png, gif, webp | video/mp4, quicktime, webm, x-msvideo
+  - Explicit file count limit (max 5 images for carousel)
+
+**TypeScript Build Fixes:**
+- **ShortsTab.tsx:** Added missing closing `</div>` tag at line 327
+- **MediaItem.tsx:** Added null coalescing `localUrl || ''` for img/video src attributes (TypeScript type safety)
+- **CreateTab.tsx:** Fixed ZapIcon className error by wrapping in span
+
+**Deployment:**
+- **Frontend repo fix:** Changed origin remote from Alubackend.git to Alufrontend.git (was pointing to wrong repo)
+- **Vercel configuration:** Identified need to set Root Directory to `alu-frontend` in Vercel dashboard (nested folder structure)
+- **Build passes:** All TypeScript errors resolved, successful Vercel deployment
+
+**Modified Files (Backend — 2 files):**
+- `alu-backend/server.js` — Added mongoSanitize middleware, 3 rate limiters (global, upload, generate)
+- `alu-backend/routes/uploadRoutes.js` — Changed to `upload.array('files', 5)`, added MIME type fileFilter validation
+
+**Modified Files (Frontend — 4 files):**
+- `alu-frontend/src/app/components/tabs/HomeTab.tsx` — Reduced max-width to 750px, removed onClick from media, removed PostModal
+- `alu-frontend/src/app/components/tabs/CreateTab.tsx` — Added Long Video option to manual upload types, fixed ZapIcon wrapper
+- `alu-frontend/src/app/components/tabs/ProfileTab.tsx` — Fixed delete functionality with confirmation dialog and API call
+- `alu-frontend/src/app/components/tabs/ShortsTab.tsx` — Added missing closing div tag
+- `alu-frontend/src/app/components/MediaItem.tsx` — Added null coalescing for localUrl type safety
+
+**Security Packages Added:**
+- `express-rate-limit` — Prevent DDoS and abuse
+- `express-mongo-sanitize` — Prevent MongoDB injection attacks
+
+**Build:** Frontend passes `npm run build` clean, backend security middleware operational
+
+### 2026-02-13: Security Audit + Local-First Architecture — Session 13 (Claude Sonnet)
+
+**CRITICAL LEARNING — Local-First Architecture:**
+- **User misunderstood moment:** I initially added 50MB file size restrictions thinking backend stores files → USER CORRECTED: "did u read the context.md u realize its local based??"
+- **Architecture principle:** Users store media on THEIR device in OPFS (Origin Private File System). Backend is just a PASSTHROUGH/MIDDLEMAN for syncing to Cloudinary for sharing.
+- **Why this matters:** Manual uploads are UNLIMITED because files never touch backend storage. Backend only handles metadata sync, AI API calls, and hosting.
+- **Reverted restrictions:** Changed upload limit from 50MB back to 200MB (generous passthrough limit since user's device handles the actual size)
+- **Key insight from context.md:** "Users store media on THEIR device (OPFS). Backend only handles: metadata sync, AI API calls, hosting. 10,000 users = minimal cloud storage costs"
+
+**Git & Deployment Fixes:**
+- **Frontend remote fix:** `git remote set-url origin https://github.com/Imma2013/Alufrontend.git` (was pointing to backend repo)
+- **Vercel deployment:** User needs to set Root Directory to `alu-frontend` in dashboard (nested folder causes "No Next.js version detected" error)
+- **Successful pushes:** Multiple commits (6383e97, 1131fa3, 7b65de6, a95aa15, b10492b) to correct frontend repo
+
+**Backend Security Improvements (uploadRoutes.js):**
+- **File size limit:** 200MB (was 100MB) — generous passthrough limit for local-first architecture
+- **MIME type validation:** Strict allowlist for images (jpeg, png, gif, webp) and videos (mp4, quicktime, webm, x-msvideo)
+- **Secure upload method:** `upload.array('files', 5)` instead of `upload.any()` (prevents arbitrary field names)
+- **Error message improvement:** Shows specific MIME type when file is rejected
+
+**Web Research on Local-First:**
+- Researched OPFS (Origin Private File System) for local file storage
+- Studied offline-first sync patterns with cloud as distribution layer
+- Confirmed Dexie.js (IndexedDB) for metadata, OPFS for large file storage
+- Verified local-first reduces cloud storage costs (users store their own data)
+
+**Pending Security Tasks (not yet implemented):**
+- Task 21: Backend - Add input validation + XSS protection (sanitize HTML in captions/comments, validate lengths, validate MongoDB ObjectIds)
+- Task 22: Backend - Implement cursor-based pagination for /feed, /posts/:id/comments, /posts/favorites
+- Task 23: Frontend - Add error handling + toasts (install react-hot-toast, implement error toasts, add rollback for optimistic updates)
+- Task 24: Frontend - Add loading states + infinite scroll (loading spinners for actions, intersection observer for feed pagination)
+- Task 25: Frontend - Fix misc bugs (add search debouncing 300ms, remove localhost fallback, fix blob URL memory leaks)
+
+**Modified Files:**
+- `alu-backend/routes/uploadRoutes.js` — Updated fileSize limit to 200MB, kept MIME type validation
+- `alu-backend/server.js` — Rate limiting and MongoDB sanitization from Session 12
+
+**Key Takeaway:**
+This session reinforced the importance of reading context.md thoroughly and understanding the LOCAL-FIRST architecture. Backend is NOT a file storage system — it's a metadata sync layer + AI orchestrator + passthrough to Cloudinary. Users own their data, stored locally on their device.
+
+**Build:** All TypeScript errors resolved, frontend deployed successfully to Vercel
+
+---
+
 ### NEXT SESSION PRIORITIES:
-1. **Real-time messaging**: Chat interface with WebSocket/SSE, text + image in chats
-2. **Stories**: Upload photo stories (from camera roll), plus button on profile pic, swipe through
-3. **PWA manifest + service worker**
-4. **@ mention system**: Tag users in comments/captions
-5. **Image cropping on upload** (Instagram-style)
-6. **Notification badges**: Show unread count on NotificationsIcon in nav
+1. **Complete security tasks:** Input validation, XSS protection, pagination, error handling (Tasks 21-25)
+2. **Real-time messaging**: Chat interface with WebSocket/SSE, text + image in chats
+3. **Stories**: Upload photo stories (from camera roll), plus button on profile pic, swipe through
+4. **PWA manifest + service worker**: Install to mobile home screen
+5. **@ mention system**: Tag users in comments/captions
+6. **Image cropping on upload** (Instagram-style)
+7. **Notification badges**: Show unread count on NotificationsIcon in nav
