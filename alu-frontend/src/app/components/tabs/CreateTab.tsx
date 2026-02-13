@@ -5,6 +5,7 @@ import { useAuth, useUser } from '@clerk/nextjs';
 import { ImageIcon, ZapIcon, FilmIcon, SparkleIcon, UploadIcon, GlobeIcon, LockIcon, UsersIcon } from '../icons';
 import { db } from '../../db';
 import { saveFileFromUrl, saveFileFromBlob } from '../../fileSystem';
+import ImageCarousel from '../ImageCarousel';
 
 type ContentType = 'image' | 'short' | 'video';
 
@@ -28,14 +29,14 @@ export default function CreateTab() {
   const [videoStep, setVideoStep] = useState('');
 
   // Upload state
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [isAI, setIsAI] = useState(false);
   const [videoQuality, setVideoQuality] = useState<'360p' | '720p' | '1080p' | '4k'>('360p');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Real usage data
-  const [usage, setUsage] = useState<{ dailyImages: number; monthlyShorts: number; bonusImages: number; limits: { image: number; short: number }; isPro: boolean } | null>(null);
+  const [usage, setUsage] = useState<{ dailyImages: number; dailyShorts: number; bonusImages: number; limits: { image: number; short: number }; isPro: boolean } | null>(null);
 
   useEffect(() => {
     const fetchUsage = async () => {
@@ -55,17 +56,11 @@ export default function CreateTab() {
     fetchUsage();
   }, [success]); // re-fetch after successful generation
 
-  // Dynamic types based on mode
-  const types: { key: ContentType; label: string; desc: string; icon: React.ReactNode; videoType?: 'short' | 'long' }[] = mode === 'ai'
-    ? [
-        { key: 'image', label: 'Image', desc: 'AI generated', icon: <ImageIcon size={24} /> },
-        { key: 'short', label: 'Shorts', desc: 'Pro only', icon: <ZapIcon size={24} />, videoType: 'short' },
-      ]
-    : [
-        { key: 'image', label: 'Image', desc: 'Manual upload', icon: <ImageIcon size={24} /> },
-        { key: 'short', label: 'Short Video', desc: 'Under 1 minute', icon: <ZapIcon size={24} />, videoType: 'short' },
-        { key: 'video', label: 'Long Video', desc: 'YouTube-style', icon: <FilmIcon size={24} />, videoType: 'long' },
-      ];
+  const types: { key: ContentType; label: string; desc: string; icon: React.ReactNode }[] = [
+    { key: 'image', label: 'Image', desc: mode === 'ai' ? 'AI generated' : 'Manual upload', icon: <ImageIcon size={24} /> },
+    { key: 'short', label: 'Shorts', desc: mode === 'ai' ? 'AI generated' : 'Up to 1 minute', icon: <ZapIcon size={24} /> },
+    { key: 'video', label: 'Videos', desc: mode === 'ai' ? 'Upload only' : '1 minute and up', icon: <FilmIcon size={24} /> },
+  ];
 
   const privacyOptions = [
     { value: 'everyone', label: 'Everyone', icon: <GlobeIcon size={16} /> },
@@ -77,36 +72,88 @@ export default function CreateTab() {
     ? 'image/jpeg,image/png,image/gif,image/webp'
     : 'video/mp4,video/quicktime,video/webm';
 
+  const getVideoDuration = (selected: File): Promise<number> =>
+    new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(selected);
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.onloadedmetadata = () => {
+        const duration = video.duration;
+        URL.revokeObjectURL(url);
+        resolve(duration);
+      };
+      video.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Could not read video duration'));
+      };
+      video.src = url;
+    });
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (!selected) return;
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length === 0) return;
 
-    // Validate size (100MB)
-    if (selected.size > 100 * 1024 * 1024) {
-      setError('File too large. Maximum size is 100MB.');
-      return;
-    }
+    const validateAndSet = async () => {
+      try {
+        const maxBytes = 200 * 1024 * 1024;
 
-    setFile(selected);
-    setError(null);
-    setSuccess(false);
+        if (selectedType === 'image') {
+          if (selectedFiles.length > 3) {
+            throw new Error('Maximum 3 images per post.');
+          }
+          if (selectedFiles.some((f) => !f.type.startsWith('image/'))) {
+            throw new Error('Image posts only accept image files.');
+          }
+        } else {
+          if (selectedFiles.length > 1) {
+            throw new Error('Video posts accept one video file at a time.');
+          }
+          if (!selectedFiles[0].type.startsWith('video/')) {
+            throw new Error('Video posts only accept video files.');
+          }
+        }
 
-    // Create preview
-    const url = URL.createObjectURL(selected);
-    setPreview(url);
+        for (const selected of selectedFiles) {
+          if (selected.size > maxBytes) {
+            throw new Error('File too large. Maximum size is 200MB.');
+          }
+        }
+
+        if (selectedType !== 'image') {
+          const duration = await getVideoDuration(selectedFiles[0]);
+          if (selectedType === 'short' && duration > 60) {
+            throw new Error('Shorts must be 60 seconds or less.');
+          }
+          if (selectedType === 'video' && duration < 60) {
+            throw new Error('Videos must be at least 60 seconds.');
+          }
+        }
+
+        const nextPreviews = selectedFiles.map((selected) => URL.createObjectURL(selected));
+        setFiles(selectedFiles);
+        setPreviews(nextPreviews);
+        setError(null);
+        setSuccess(false);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Invalid file selection';
+        setError(message);
+      }
+    };
+
+    void validateAndSet();
   };
 
   const clearFile = () => {
-    setFile(null);
-    if (preview) URL.revokeObjectURL(preview);
-    setPreview(null);
+    previews.forEach((preview) => URL.revokeObjectURL(preview));
+    setFiles([]);
+    setPreviews([]);
     setIsAI(false);
     setVideoQuality('360p');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (files.length === 0) return;
     setIsLoading(true);
     setError(null);
     setSuccess(false);
@@ -116,8 +163,8 @@ export default function CreateTab() {
       if (!token) throw new Error('You must be signed in to upload.');
 
       const formData = new FormData();
-      formData.append('file', file);
-      formData.append('mediaType', file.type.startsWith('image/') ? 'image' : 'video');
+      files.forEach((selected) => formData.append('files', selected));
+      formData.append('mediaType', selectedType === 'image' ? 'image' : 'video');
       formData.append('caption', caption);
       if (selectedType === 'short') formData.append('videoType', 'short');
       if (selectedType === 'video') formData.append('videoType', 'long');
@@ -125,7 +172,7 @@ export default function CreateTab() {
       formData.append('visibility', privacy);
       formData.append('displayName', displayName);
       formData.append('avatarUrl', avatarUrl);
-      if (!file.type.startsWith('image/')) formData.append('quality', videoQuality);
+      if (selectedType !== 'image') formData.append('quality', videoQuality);
 
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/upload`,
@@ -144,18 +191,26 @@ export default function CreateTab() {
       const result = await response.json();
 
       if (result.post) {
-        // Try to save file locally to OPFS (may return null if not supported)
-        const ext = result.post.mediaType === 'image' ? 'png' : 'mp4';
-        const fileName = `${result.post._id}.${ext}`;
-        const fileHandle = await saveFileFromBlob(file, fileName);
+        if (selectedType === 'image' && files.length > 1) {
+          // Multi-image posts render from synced image URLs (carousel).
+          await db.posts.put({
+            ...result.post,
+            synced: 1,
+            updatedAt: new Date(),
+          });
+        } else {
+          // Single file: save local copy in OPFS when supported.
+          const ext = result.post.mediaType === 'image' ? 'png' : 'mp4';
+          const fileName = `${result.post._id}.${ext}`;
+          const fileHandle = await saveFileFromBlob(files[0], fileName);
 
-        // Save to Dexie (use contentUrl from backend if OPFS failed)
-        await db.posts.put({
-          ...result.post,
-          contentUrl: fileHandle ? fileName : result.post.contentUrl,
-          synced: 1,
-          updatedAt: new Date(),
-        });
+          await db.posts.put({
+            ...result.post,
+            contentUrl: fileHandle ? fileName : result.post.contentUrl,
+            synced: 1,
+            updatedAt: new Date(),
+          });
+        }
 
         setSuccess(true);
         clearFile();
@@ -172,6 +227,10 @@ export default function CreateTab() {
 
   const handleAIGenerate = async () => {
     if (!prompt.trim()) return;
+    if (selectedType === 'video') {
+      setError('AI video generation is not enabled in this tab yet. Use Upload for videos.');
+      return;
+    }
     setIsLoading(true);
     setError(null);
     setSuccess(false);
@@ -317,12 +376,17 @@ export default function CreateTab() {
       <h2 className="text-xl font-bold text-alu-text mb-6">Create</h2>
 
       {/* Content Type Selector */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
+      <div className="grid grid-cols-3 gap-3 mb-6">
         {types.map((t) => (
           <button
             key={t.key}
-            onClick={() => { setSelectedType(t.key); clearFile(); }}
-            className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-200 ${selectedType === t.key
+            onClick={() => {
+              if (mode === 'ai' && t.key === 'video') return;
+              setSelectedType(t.key);
+              clearFile();
+            }}
+            disabled={mode === 'ai' && t.key === 'video'}
+            className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-200 ${mode === 'ai' && t.key === 'video' ? 'opacity-60 cursor-not-allowed' : ''} ${selectedType === t.key
               ? 'border-[var(--alu-primary)] bg-[var(--alu-primary-glow)]'
               : 'border-alu-border hover:border-alu-text-tertiary bg-white'
               }`}
@@ -346,7 +410,10 @@ export default function CreateTab() {
           <UploadIcon size={16} /> Upload
         </button>
         <button
-          onClick={() => setMode('ai')}
+          onClick={() => {
+            setMode('ai');
+            if (selectedType === 'video') setSelectedType('image');
+          }}
           className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${mode === 'ai' ? 'bg-white text-alu-text shadow-sm' : 'text-alu-text-tertiary hover:text-alu-text-secondary'
             }`}
         >
@@ -362,9 +429,10 @@ export default function CreateTab() {
             type="file"
             accept={acceptTypes}
             onChange={handleFileSelect}
+            multiple={selectedType === 'image'}
             className="hidden"
           />
-          {!file ? (
+          {files.length === 0 ? (
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -374,18 +442,20 @@ export default function CreateTab() {
                 <UploadIcon size={40} />
               </div>
               <p className="text-sm font-semibold text-alu-text mb-1">
-                Tap to upload {selectedType === 'image' ? 'a photo' : 'a video'}
+                Tap to upload {selectedType === 'image' ? 'photos' : 'a video'}
               </p>
               <p className="text-xs text-alu-text-tertiary">
-                {selectedType === 'image' ? 'JPG, PNG, GIF, WebP' : 'MP4, MOV, WebM'} — max 100MB
+                {selectedType === 'image' ? 'JPG, PNG, GIF, WebP (up to 3)' : 'MP4, MOV, WebM'} - max 200MB
               </p>
             </button>
           ) : (
             <div className="relative rounded-xl overflow-hidden border-2 border-[var(--alu-primary)] bg-black">
-              {file.type.startsWith('image/') ? (
-                <img src={preview!} alt="Preview" className="w-full max-h-80 object-contain" />
+              {selectedType === 'image' ? (
+                <div className="w-full max-h-80 min-h-[220px]">
+                  <ImageCarousel images={previews} />
+                </div>
               ) : (
-                <video src={preview!} controls playsInline className="w-full max-h-80" />
+                <video src={previews[0]} controls playsInline className="w-full max-h-80" />
               )}
               <button
                 onClick={clearFile}
@@ -394,7 +464,7 @@ export default function CreateTab() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
               <div className="absolute bottom-2 left-2 text-[11px] bg-black/60 text-white px-2 py-1 rounded">
-                {(file.size / (1024 * 1024)).toFixed(1)}MB
+                {files.length > 1 ? `${files.length} images` : `${(files[0].size / (1024 * 1024)).toFixed(1)}MB`}
               </div>
             </div>
           )}
@@ -412,27 +482,17 @@ export default function CreateTab() {
                     </span>
                     <span className="text-sm font-bold text-alu-text">Shorts Remaining</span>
                   </div>
-                  <p className="text-xs text-alu-text-secondary">
-                    {usage.isPro ? 'Resets monthly' : 'Upgrade to Pro for 5/month'}
-                  </p>
+                  <p className="text-xs text-alu-text-secondary">Resets daily</p>
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-[var(--alu-primary)]">
-                    {Math.max(0, usage.limits.short - usage.monthlyShorts)}
+                    {Math.max(0, usage.limits.short - usage.dailyShorts)}
                   </div>
                   <div className="text-xs text-alu-text-tertiary">
                     of {usage.limits.short}
                   </div>
                 </div>
               </div>
-              {!usage.isPro && (
-                <button
-                  onClick={() => window.open('/pricing', '_blank')}
-                  className="mt-3 w-full py-2 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-[var(--alu-primary)] to-[var(--alu-primary-light)] hover:opacity-90 transition-opacity"
-                >
-                  Upgrade to Pro
-                </button>
-              )}
             </div>
           )}
 
@@ -452,11 +512,9 @@ export default function CreateTab() {
                 {usage ? (
                   selectedType === 'image'
                     ? `${Math.max(0, usage.limits.image - usage.dailyImages)} images left today`
-                    : usage.isPro
-                      ? `${Math.max(0, usage.limits.short - usage.monthlyShorts)} shorts left this month`
-                      : '🔒 Pro only'
+                    : `${Math.max(0, usage.limits.short - usage.dailyShorts)} shorts left today`
                 ) : 'Loading...'}
-                {' · '}{usage?.isPro ? 'Pro' : 'Free tier'}
+                {' - '}{usage?.isPro ? 'Pro' : 'Free tier'}
               </span>
             </div>
           </div>
@@ -481,7 +539,7 @@ export default function CreateTab() {
       )}
 
       {/* Video Quality (upload mode + video only) */}
-      {mode === 'upload' && file && !file.type.startsWith('image/') && (
+      {mode === 'upload' && files.length > 0 && selectedType !== 'image' && (
         <div className="mb-6">
           <label className="text-xs font-semibold text-alu-text mb-2 block">Video Quality</label>
           <div className="flex gap-2">
@@ -559,10 +617,10 @@ export default function CreateTab() {
 
       {/* Submit */}
       {(() => {
-        const canGenerateShort = !usage || selectedType !== 'short' || mode !== 'ai' || (usage.monthlyShorts < usage.limits.short && usage.isPro);
-        const isDisabled = isLoading || (mode === 'ai' && !prompt.trim()) || (mode === 'upload' && !file) || !canGenerateShort;
+        const canGenerateShort = !usage || selectedType !== 'short' || mode !== 'ai' || usage.dailyShorts < usage.limits.short;
+        const isDisabled = isLoading || (mode === 'ai' && !prompt.trim()) || (mode === 'upload' && files.length === 0) || !canGenerateShort;
         const tooltipText = !canGenerateShort && selectedType === 'short' && mode === 'ai'
-          ? (usage?.isPro ? 'Monthly shorts limit reached' : 'Upgrade to Pro to generate shorts')
+          ? 'Daily shorts limit reached'
           : '';
 
         return (
@@ -591,3 +649,4 @@ export default function CreateTab() {
     </div>
   );
 }
+

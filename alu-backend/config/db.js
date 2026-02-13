@@ -7,6 +7,8 @@ const UserSchema = new mongoose.Schema({
   avatarUrl: { type: String, default: '' },
   bio: { type: String, default: '' },
   dailyImages: { type: Number, default: 0 },
+  dailyShorts: { type: Number, default: 0 },
+  dailyLongVids: { type: Number, default: 0 },
   monthlyShorts: { type: Number, default: 0 },
   lastResetDate: { type: Date, default: Date.now },
   lastMonthlyResetDate: { type: Date, default: Date.now },
@@ -38,7 +40,7 @@ const PostSchema = new mongoose.Schema({
   status: { type: String, enum: ['ready', 'pending', 'failed'], default: 'ready' },
   displayName: { type: String, default: '' },
   avatarUrl: { type: String, default: '' },
-  images: [{ type: String }], // Array of image URLs for carousel posts (up to 5 images)
+  images: [{ type: String }], // Array of image URLs for carousel posts (up to 3 images)
 }, { timestamps: true });
 
 // Comment Schema

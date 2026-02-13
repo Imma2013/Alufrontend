@@ -21,9 +21,11 @@ cloudinary.config({
 
 // Limits
 const LIMITS = {
-  image: 3,    // daily for Free, 30 for Pro (10x multiplier)
-  short: 5,    // monthly for Pro ONLY (no Free access)
-  long: 0      // killed
+  imageFreeDaily: 3,
+  imageProDaily: 30,
+  shortFreeDaily: 1,
+  shortProDaily: 5,
+  long: 0, // killed
 };
 
 /**
@@ -102,18 +104,16 @@ async function generateContent(userId, prompt, type, isLongVideo = false, visibi
   // Limit checking
   if (type === 'image') {
     // Images: daily, Free gets 3, Pro gets 30, bonus credits stack
-    const baseLimit = LIMITS.image * (user.isPro ? 10 : 1);
+    const baseLimit = user.isPro ? LIMITS.imageProDaily : LIMITS.imageFreeDaily;
     const bonus = user.bonusImages || 0;
     if (user.dailyImages >= baseLimit + bonus) {
       throw new Error('429: Daily image limit reached.');
     }
   } else if (type === 'video' && !isLongVideo) {
-    // Shorts: monthly, Pro-only, 5/month, no bonus
-    if (!user.isPro) {
-      throw new Error('403: AI Shorts are Pro-only. Upgrade to generate 5 shorts/month.');
-    }
-    if (user.monthlyShorts >= LIMITS.short) {
-      throw new Error('429: Monthly shorts limit reached (5/month).');
+    // Shorts: daily, Free gets 1/day, Pro gets 5/day
+    const shortLimit = user.isPro ? LIMITS.shortProDaily : LIMITS.shortFreeDaily;
+    if ((user.dailyShorts || 0) >= shortLimit) {
+      throw new Error(`429: Daily shorts limit reached (${shortLimit}/day).`);
     }
   } else if (type === 'video' && isLongVideo) {
     // Long videos: killed
@@ -242,7 +242,7 @@ async function generateContent(userId, prompt, type, isLongVideo = false, visibi
     if (type === 'image') {
       user.dailyImages += 1;
     } else if (type === 'video' && !isLongVideo) {
-      user.monthlyShorts += 1;
+      user.dailyShorts = (user.dailyShorts || 0) + 1;
     }
     await user.save();
 

@@ -13,26 +13,47 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Multer: store in memory (buffer), 100MB limit
+// Multer: store in memory (buffer), 200MB limit (generous since we're just a passthrough)
+// Users store files in OPFS locally - we just sync to Cloudinary for sharing
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 100 * 1024 * 1024 },
+  limits: { fileSize: 200 * 1024 * 1024 }, // 200MB - local-first means user's device handles the size
+  fileFilter: (req, file, cb) => {
+    // Only allow images and videos
+    const allowedMimes = [
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+      'video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'
+    ];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Invalid file type: ${file.mimetype}. Only images and videos allowed.`));
+    }
+  },
 });
 
 /**
  * POST /upload
  * Accepts multipart/form-data with:
- *   - file or files: single file or multiple image files (up to 5 for carousel)
+ *   - file or files: single file or multiple image files (up to 3 for carousel)
  *   - mediaType: 'image' | 'video'
  *   - caption: optional text caption
  *   - videoType: 'short' | 'long' (optional, for videos)
  */
-router.post('/', clerkAuth, upload.any(), async (req, res) => {
+router.post(
+  '/',
+  clerkAuth,
+  upload.fields([
+    { name: 'files', maxCount: 3 },
+    { name: 'file', maxCount: 1 },
+  ]),
+  async (req, res) => {
   const userId = req.auth.sub;
   const { caption, mediaType, videoType, visibility, displayName, avatarUrl, is_ai, quality } = req.body;
 
   // Support both single 'file' and multiple 'files'
-  const files = req.files || [];
+  const uploadFiles = req.files || {};
+  const files = [...(uploadFiles.files || []), ...(uploadFiles.file || [])];
 
   if (files.length === 0) {
     return res.status(400).json({ error: 'No file(s) uploaded' });
@@ -42,9 +63,14 @@ router.post('/', clerkAuth, upload.any(), async (req, res) => {
     return res.status(400).json({ error: 'mediaType must be "image" or "video"' });
   }
 
-  // Limit multi-image uploads to 5 images max
-  if (files.length > 5 && mediaType === 'image') {
-    return res.status(400).json({ error: 'Maximum 5 images allowed per post' });
+  // Limit multi-image uploads to 3 images max
+  if (files.length > 3 && mediaType === 'image') {
+    return res.status(400).json({ error: 'Maximum 3 images allowed per post' });
+  }
+
+  // Videos must be a single file per post
+  if (mediaType === 'video' && files.length > 1) {
+    return res.status(400).json({ error: 'Video posts can only contain one file' });
   }
 
   try {
@@ -118,7 +144,7 @@ router.post('/', clerkAuth, upload.any(), async (req, res) => {
   } catch (error) {
     console.error('Upload Error:', error);
     if (error.message?.includes('File too large')) {
-      return res.status(413).json({ error: 'File too large. Maximum size is 100MB.' });
+      return res.status(413).json({ error: 'File too large. Maximum size is 200MB.' });
     }
     res.status(500).json({ error: 'Upload failed. Please try again.' });
   }

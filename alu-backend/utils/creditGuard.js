@@ -15,8 +15,10 @@ const initCreditGuard = () => {
       for (const user of users) {
         const updates = {};
 
-        // Daily reset: images only
+        // Daily reset: AI limits
         updates.dailyImages = 0;
+        updates.dailyShorts = 0;
+        updates.dailyLongVids = 0;
         updates.lastResetDate = now;
         dailyResetCount++;
 

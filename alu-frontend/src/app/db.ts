@@ -22,7 +22,7 @@ export interface Post {
   displayName?: string;  // User's display name (from Clerk)
   avatarUrl?: string;     // User's profile picture URL (from Clerk)
   commentsCount?: number; // Number of comments on this post
-  images?: string[];      // Array of image URLs for carousel posts (up to 5 images)
+  images?: string[];      // Array of image URLs for carousel posts (up to 3 images)
 }
 
 export interface SyncState {

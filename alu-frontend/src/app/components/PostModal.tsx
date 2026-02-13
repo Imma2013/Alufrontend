@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { Post, db } from '../db';
 import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon } from './icons';
+import ImageCarousel from './ImageCarousel';
 
 interface CommentData {
   _id: string;
@@ -56,11 +57,11 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
 
   // Scroll modal content to top on mount and when post changes
   useEffect(() => {
-    setMediaLoaded(false);
+    setMediaLoaded(!(post.mediaType === 'image' && !!post.images && post.images.length > 1));
     if (modalContentRef.current) {
       modalContentRef.current.scrollTop = 0;
     }
-  }, [post._id]);
+  }, [post._id, post.mediaType, post.images]);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -461,13 +462,19 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
 
           {post.mediaType === 'image' ? (
             <div className="w-full h-full flex items-center justify-center">
-              <img
-                src={post.contentUrl}
-                alt={post.safePrompt}
-                className="object-contain w-full h-full"
-                onLoad={() => setMediaLoaded(true)}
-                onError={() => setMediaLoaded(true)}
-              />
+              {post.images && post.images.length > 1 ? (
+                <div className="w-full h-full">
+                  <ImageCarousel images={post.images} />
+                </div>
+              ) : (
+                <img
+                  src={post.contentUrl}
+                  alt={post.safePrompt}
+                  className="object-contain w-full h-full"
+                  onLoad={() => setMediaLoaded(true)}
+                  onError={() => setMediaLoaded(true)}
+                />
+              )}
             </div>
           ) : (
             <div className="w-full h-full relative">

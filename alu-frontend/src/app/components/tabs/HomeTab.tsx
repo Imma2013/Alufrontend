@@ -8,6 +8,7 @@ import { pullChanges, pushChanges } from '../../syncService';
 import MediaItem from '../MediaItem';
 import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon } from '../icons';
 import PostModal from '../PostModal';
+import ImageCarousel from '../ImageCarousel';
 
 interface UserResult {
   userId: string;
@@ -357,7 +358,11 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                   }
                 }}
               >
-                <MediaItem post={post} />
+                {post.mediaType === 'image' && post.images && post.images.length > 1 ? (
+                  <ImageCarousel images={post.images} />
+                ) : (
+                  <MediaItem post={post} />
+                )}
                 {post.is_ai && (
                   <div className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded bg-black/40 text-white backdrop-blur-sm">
                     AI

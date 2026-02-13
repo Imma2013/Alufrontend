@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const mongoSanitize = require('express-mongo-sanitize');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const { connectDB, Post, User } = require('./config/db');
@@ -32,32 +34,50 @@ app.use(cors());
 app.use(helmet());
 app.use(morgan('dev'));
 
-// Simple rate limiter for uploads (10 req/min per IP)
-const uploadRateLimit = new Map();
-const rateLimitUpload = (req, res, next) => {
-  const ip = req.ip;
-  const now = Date.now();
-  const windowMs = 60000;
-  const maxRequests = 10;
-  const requests = (uploadRateLimit.get(ip) || []).filter(t => now - t < windowMs);
-  if (requests.length >= maxRequests) {
-    return res.status(429).json({ error: 'Too many uploads. Please try again later.' });
-  }
-  requests.push(now);
-  uploadRateLimit.set(ip, requests);
-  next();
-};
+// MongoDB injection protection - sanitize req.body, req.query, req.params
+app.use(mongoSanitize({
+  replaceWith: '_', // Replace $ and . with _ instead of removing
+  onSanitize: ({ req, key }) => {
+    console.warn(`Sanitized suspicious key: ${key} from ${req.ip}`);
+  },
+}));
+
+// Global rate limiter - 100 requests per 15 minutes per IP
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Max 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
+  legacyHeaders: false, // Disable `X-RateLimit-*` headers
+});
+
+// Stricter rate limiter for uploads - 10 req/min per IP
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10,
+  message: 'Too many uploads. Please try again later.',
+});
+
+// Stricter rate limiter for AI generation - 20 req/hour per IP
+const generateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20,
+  message: 'Too many AI generation requests. Please try again later.',
+});
+
+// Apply global rate limiter to all routes
+app.use(globalLimiter);
 
 // Routes
 app.use('/payments', paymentRoutes);
 app.use('/sync', syncRoutes);
-app.use('/upload', rateLimitUpload, uploadRoutes);
+app.use('/upload', uploadLimiter, uploadRoutes);
 app.use('/users', userRoutes);
 app.use('/posts', postRoutes);
 app.use('/notifications', notificationRoutes);
 
 // This route is now protected. A valid Clerk token is required.
-app.post('/generate', clerkAuth, async (req, res) => {
+app.post('/generate', generateLimiter, clerkAuth, async (req, res) => {
   const userId = req.auth.sub;
   const { prompt, type, isLongVideo, visibility, displayName, avatarUrl } = req.body;
 
@@ -86,14 +106,14 @@ app.get('/usage', clerkAuth, async (req, res) => {
       { $setOnInsert: { userId } },
       { upsert: true, new: true }
     );
-    const proMultiplier = user.isPro ? 10 : 1;
+    const shortLimit = user.isPro ? 5 : 1;
     res.json({
       dailyImages: user.dailyImages || 0,
-      monthlyShorts: user.monthlyShorts || 0,
+      dailyShorts: user.dailyShorts || 0,
       bonusImages: user.bonusImages || 0,
       limits: {
-        image: 3 * proMultiplier,
-        short: user.isPro ? 5 : 0,  // Pro gets 5/month, Free gets 0
+        image: user.isPro ? 30 : 3,
+        short: shortLimit,
       },
       isPro: user.isPro || false,
     });
@@ -138,7 +158,7 @@ app.get('/', (req, res) => {
 });
 
 // --- Short Video Stitching (up to 60s, 9:16 vertical) ---
-app.post('/generate/short-video', clerkAuth, async (req, res) => {
+app.post('/generate/short-video', generateLimiter, clerkAuth, async (req, res) => {
   try {
     const userId = req.auth.sub;
     const { prompt, durationSeconds, visibility, displayName, avatarUrl } = req.body;
@@ -149,14 +169,12 @@ app.post('/generate/short-video', clerkAuth, async (req, res) => {
 
     const duration = Math.min(Math.max(durationSeconds || 60, 8), 60); // 8s - 60s
 
-    // Check monthly limit (Pro-only)
+    // Check daily shorts limit
     let user = await User.findOne({ userId });
     if (!user) user = await User.create({ userId, displayName, avatarUrl });
-    if (!user.isPro) {
-      return res.status(403).json({ error: 'AI Shorts are Pro-only. Upgrade to generate 5 shorts/month.' });
-    }
-    if (user.monthlyShorts >= 5) {
-      return res.status(429).json({ error: 'Monthly shorts limit reached (5/month).' });
+    const shortLimit = user.isPro ? 5 : 1;
+    if ((user.dailyShorts || 0) >= shortLimit) {
+      return res.status(429).json({ error: `Daily shorts limit reached (${shortLimit}/day).` });
     }
 
     // Create job with 9:16 aspect ratio for shorts

@@ -47,7 +47,24 @@ export default function App() {
   const [showAI, setShowAI] = useState(true);
   const [showNormal, setShowNormal] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [homeSearchQuery, setHomeSearchQuery] = useState('');
+  const [shortsSearchQuery, setShortsSearchQuery] = useState('');
+  const [videosSearchQuery, setVideosSearchQuery] = useState('');
+
+  const activeSearchQuery =
+    activeTab === 'home'
+      ? homeSearchQuery
+      : activeTab === 'shorts'
+        ? shortsSearchQuery
+        : activeTab === 'videos'
+          ? videosSearchQuery
+          : '';
+
+  const setActiveSearchQuery = (value: string) => {
+    if (activeTab === 'home') setHomeSearchQuery(value);
+    if (activeTab === 'shorts') setShortsSearchQuery(value);
+    if (activeTab === 'videos') setVideosSearchQuery(value);
+  };
 
   // Sign-in screen for logged-out users
   if (isLoaded && !isSignedIn) {
@@ -123,14 +140,14 @@ export default function App() {
                   <input
                     type="text"
                     placeholder="Search"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    value={activeSearchQuery}
+                    onChange={(e) => setActiveSearchQuery(e.target.value)}
                     autoFocus
-                    onBlur={() => { if (!searchQuery) setSearchOpen(false); }}
+                    onBlur={() => { if (!activeSearchQuery) setSearchOpen(false); }}
                     className="w-full h-9 pl-8 pr-8 rounded-full text-sm bg-[var(--alu-surface)] text-[var(--alu-text)] placeholder:text-[var(--alu-text-tertiary)] outline-none ring-2 ring-[var(--alu-primary-glow)]"
                   />
                   <button
-                    onClick={() => { setSearchOpen(false); setSearchQuery(''); }}
+                    onClick={() => { setSearchOpen(false); setActiveSearchQuery(''); }}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--alu-text-tertiary)] hover:text-[var(--alu-text)]"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
@@ -249,14 +266,14 @@ export default function App() {
                 <input
                   type="text"
                   placeholder="Search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  value={activeSearchQuery}
+                  onChange={(e) => setActiveSearchQuery(e.target.value)}
                   autoFocus
-                  onBlur={() => { if (!searchQuery) setSearchOpen(false); }}
+                  onBlur={() => { if (!activeSearchQuery) setSearchOpen(false); }}
                   className="w-full h-10 pl-10 pr-10 rounded-full text-sm bg-[var(--alu-surface)] text-[var(--alu-text)] placeholder:text-[var(--alu-text-tertiary)] outline-none ring-2 ring-[var(--alu-primary-glow)]"
                 />
                 <button
-                  onClick={() => { setSearchOpen(false); setSearchQuery(''); }}
+                  onClick={() => { setSearchOpen(false); setActiveSearchQuery(''); }}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--alu-text-tertiary)] hover:text-[var(--alu-text)]"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
@@ -290,9 +307,9 @@ export default function App() {
 
         {/* Tab Content */}
         <div className="w-full">
-          {activeTab === 'home' && <HomeTab showAI={showAI} showNormal={showNormal} searchQuery={searchQuery} onViewUser={handleViewUser} />}
-          {activeTab === 'shorts' && <ShortsTab />}
-          {activeTab === 'videos' && <VideosTab />}
+          {activeTab === 'home' && <HomeTab showAI={showAI} showNormal={showNormal} searchQuery={homeSearchQuery} onViewUser={handleViewUser} />}
+          {activeTab === 'shorts' && <ShortsTab searchQuery={shortsSearchQuery} />}
+          {activeTab === 'videos' && <VideosTab searchQuery={videosSearchQuery} />}
           {activeTab === 'create' && <CreateTab />}
           {activeTab === 'profile' && <ProfileTab viewUserId={viewUserId} onBack={() => setViewUserId(null)} onViewUser={handleViewUser} />}
           {activeTab === 'notifications' && <NotificationsTab />}
