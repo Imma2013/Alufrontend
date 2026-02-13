@@ -83,7 +83,9 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
   useEffect(() => {
     if (!openComments) return;
     const timer = setTimeout(() => {
-      commentInputRef.current?.focus();
+      if (commentsSectionRef.current) {
+        commentsSectionRef.current.scrollTop = 0;
+      }
     }, 120);
     return () => clearTimeout(timer);
   }, [openComments, post._id]);
@@ -451,7 +453,10 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
           </svg>
         </button>
 
-        <div className="w-full md:w-[62%] h-[44dvh] md:h-full bg-black flex items-center justify-center relative flex-shrink-0" style={{ minHeight: '240px' }}>
+        <div
+          className={`w-full md:w-[62%] h-[44dvh] md:h-full flex items-center justify-center relative flex-shrink-0 ${post.mediaType === 'image' ? 'bg-alu-surface' : 'bg-black'}`}
+          style={{ minHeight: '240px' }}
+        >
           {/* Loading spinner */}
           {!mediaLoaded && (
             <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
@@ -469,7 +474,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
                 <img
                   src={post.contentUrl}
                   alt={post.safePrompt}
-                  className="object-contain w-full h-full"
+                  className="object-cover w-full h-full"
                   onLoad={() => setMediaLoaded(true)}
                   onError={() => setMediaLoaded(true)}
                 />

@@ -263,7 +263,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
   };
 
   return (
-    <div className="w-full max-w-full md:max-w-[750px] mx-auto animate-fade-in">
+    <div className="w-full max-w-full md:max-w-[700px] mx-auto animate-fade-in">
       {/* Sync indicator */}
       {isSyncing && (
         <div className="text-center py-2">
