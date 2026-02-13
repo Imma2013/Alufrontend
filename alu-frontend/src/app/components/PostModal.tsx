@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { Post, db } from '../db';
-import MediaItem from './MediaItem';
 import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon } from './icons';
 
 interface CommentData {
@@ -25,9 +24,10 @@ interface PostModalProps {
   onClose: () => void;
   onViewUser?: (userId: string) => void;
   onDeleted?: (postId: string) => void;
+  openComments?: boolean;
 }
 
-export default function PostModal({ post, onClose, onViewUser, onDeleted }: PostModalProps) {
+export default function PostModal({ post, onClose, onViewUser, onDeleted, openComments = false }: PostModalProps) {
   const { getToken } = useAuth();
   const { user } = useUser();
   const [likeCount, setLikeCount] = useState(post.likes || 0);
@@ -46,6 +46,8 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted }: Post
   const [deleting, setDeleting] = useState(false);
   const [mediaLoaded, setMediaLoaded] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement>(null);
+  const commentInputRef = useRef<HTMLInputElement>(null);
+  const commentsSectionRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modalContentRef = useRef<HTMLDivElement>(null);
 
@@ -61,6 +63,14 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted }: Post
   }, [post._id]);
 
   useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
     setLoadingComments(true);
     fetch(`${backendUrl}/posts/${post._id}/comments`)
       .then(res => res.ok ? res.json() : { comments: [] })
@@ -68,6 +78,15 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted }: Post
       .catch(() => setComments([]))
       .finally(() => setLoadingComments(false));
   }, [post._id, backendUrl]);
+
+  useEffect(() => {
+    if (!openComments) return;
+    const timer = setTimeout(() => {
+      commentsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      commentInputRef.current?.focus();
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [openComments, post._id]);
 
   const uploadImageToCloudinary = async (file: File): Promise<string> => {
     const formData = new FormData();
@@ -179,7 +198,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted }: Post
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
-          text: commentText.trim() || '📷',
+          text: commentText.trim() || '[image]',
           displayName: user?.fullName || '',
           avatarUrl: user?.imageUrl || '',
           parentCommentId: replyingTo?._id || null,
@@ -417,9 +436,9 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted }: Post
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-stretch md:items-center justify-center p-0 md:p-4 overflow-hidden" onClick={onClose}>
       <div
-        className="relative bg-white w-full max-w-[950px] h-[90vh] max-h-[90vh] rounded-2xl overflow-hidden animate-fade-in flex flex-row"
+        className="relative bg-white w-full h-[100dvh] md:h-[90vh] md:max-h-[90vh] md:max-w-[950px] rounded-none md:rounded-2xl overflow-hidden animate-fade-in flex flex-col md:flex-row"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -432,7 +451,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted }: Post
           </svg>
         </button>
 
-        <div className="w-[55%] md:w-[60%] bg-black flex items-center justify-center relative flex-shrink-0" style={{ minHeight: '300px', maxHeight: '90vh' }}>
+        <div className="w-full md:w-[60%] h-[44dvh] md:h-auto bg-black flex items-center justify-center relative flex-shrink-0" style={{ minHeight: '240px' }}>
           {/* Loading spinner */}
           {!mediaLoaded && (
             <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
@@ -451,7 +470,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted }: Post
               />
             </div>
           ) : (
-            <div className="w-full aspect-video relative">
+            <div className="w-full h-full relative">
               <video
                 src={post.contentUrl}
                 controls
@@ -469,7 +488,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted }: Post
           )}
         </div>
 
-        <div ref={modalContentRef} className="w-[45%] md:w-[40%] flex flex-col max-h-[90vh] overflow-y-auto">
+        <div ref={modalContentRef} className="w-full md:w-[40%] flex-1 flex flex-col max-h-[56dvh] md:max-h-[90vh] overflow-y-auto">
           <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--alu-border)] shrink-0">
             <button onClick={handleViewUser} className="shrink-0">
               {post.avatarUrl ? (
@@ -499,7 +518,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted }: Post
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 py-3">
+          <div ref={commentsSectionRef} className="flex-1 overflow-y-auto px-4 py-3">
             {post.safePrompt && post.safePrompt !== 'User upload' && (
               <div className="flex gap-2.5 mb-4">
                 {post.avatarUrl ? (
@@ -539,7 +558,13 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted }: Post
                 <HeartIcon size={22} />
                 <span className="text-xs font-medium">{likeCount}</span>
               </button>
-              <button className="text-alu-text-secondary hover:text-alu-text transition-colors">
+              <button
+                onClick={() => {
+                  commentsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  commentInputRef.current?.focus();
+                }}
+                className="text-alu-text-secondary hover:text-alu-text transition-colors"
+              >
                 <CommentIcon size={22} />
               </button>
               <button
@@ -615,6 +640,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted }: Post
                 </svg>
               </button>
               <input
+                ref={commentInputRef}
                 type="text"
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}

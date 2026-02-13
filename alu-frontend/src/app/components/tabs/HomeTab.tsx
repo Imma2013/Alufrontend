@@ -6,9 +6,8 @@ import { useAuth, useUser } from '@clerk/nextjs';
 import { db, Post } from '../../db';
 import { pullChanges, pushChanges } from '../../syncService';
 import MediaItem from '../MediaItem';
-import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon, SearchIcon } from '../icons';
+import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon } from '../icons';
 import PostModal from '../PostModal';
-import CommentsDrawer from '../CommentsDrawer';
 
 interface UserResult {
   userId: string;
@@ -32,7 +31,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
   const [savedPosts, setSavedPosts] = useState<Set<string>>(new Set());
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
+  const [openCommentsOnModal, setOpenCommentsOnModal] = useState(false);
   const [peopleResults, setPeopleResults] = useState<UserResult[]>([]);
   const [isSearchingPeople, setIsSearchingPeople] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -239,6 +238,11 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
     return `${days}d ago`;
   };
 
+  const openPostModal = (post: Post, openComments = false) => {
+    setSelectedPost(post);
+    setOpenCommentsOnModal(openComments);
+  };
+
   return (
     <div className="w-full max-w-full md:max-w-[750px] mx-auto animate-fade-in">
       {/* Sync indicator */}
@@ -341,7 +345,18 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
               </div>
 
               {/* Post Media */}
-              <div className="w-full aspect-[4/3] bg-alu-surface relative overflow-hidden">
+              <div
+                className="w-full aspect-[4/3] bg-alu-surface relative overflow-hidden cursor-pointer"
+                onClick={() => openPostModal(post)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openPostModal(post);
+                  }
+                }}
+              >
                 <MediaItem post={post} />
                 {post.is_ai && (
                   <div className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded bg-black/40 text-white backdrop-blur-sm">
@@ -361,7 +376,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                     <HeartIcon size={20} />
                     <span className="text-xs font-medium">{likedPosts[post._id] ?? post.likes ?? 0}</span>
                   </button>
-                  <button onClick={() => setCommentsPostId(post._id)} className="flex items-center gap-1.5 text-alu-text-secondary hover:text-alu-text transition-colors">
+                  <button onClick={() => openPostModal(post, true)} className="flex items-center gap-1.5 text-alu-text-secondary hover:text-alu-text transition-colors">
                     <CommentIcon size={20} />
                     {(post.commentsCount ?? 0) > 0 && (
                       <span className="text-xs font-medium">{formatCount(post.commentsCount ?? 0)}</span>
@@ -394,12 +409,17 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
         })}
       </div>
 
-      {/* Comments drawer */}
-      <CommentsDrawer
-        postId={commentsPostId || ''}
-        isOpen={!!commentsPostId}
-        onClose={() => setCommentsPostId(null)}
-      />
+      {selectedPost && (
+        <PostModal
+          post={selectedPost}
+          onClose={() => {
+            setSelectedPost(null);
+            setOpenCommentsOnModal(false);
+          }}
+          onViewUser={onViewUser}
+          openComments={openCommentsOnModal}
+        />
+      )}
     </div>
   );
 }
