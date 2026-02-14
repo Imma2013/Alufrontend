@@ -30,18 +30,33 @@ export interface SyncState {
   timestamp: string; // ISO Date string
 }
 
+export interface Story {
+  _id: string;
+  userId: string;
+  imageUrl: string;
+  text?: string;
+  textColor?: string;
+  createdAt: Date;
+  expiresAt: Date;
+  displayName?: string;
+  avatarUrl?: string;
+  viewedBy?: string[];
+}
+
 export class AluDexie extends Dexie {
   posts!: Table<Post>;
   syncState!: Table<SyncState>;
+  stories!: Table<Story>;
 
   constructor() {
     super('aluDatabase');
 
     // Only declare the current schema version — no old versions
     // Old databases with ++id primary key will be deleted and recreated (see initDb below)
-    this.version(4).stores({
+    this.version(5).stores({
       posts: '_id, mediaType, timestamp, userId, synced, updatedAt',
-      syncState: 'id'
+      syncState: 'id',
+      stories: '_id, userId, createdAt, expiresAt'
     });
   }
 }
