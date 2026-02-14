@@ -54,7 +54,7 @@ Video concept: ${prompt}`;
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
+            model: 'gemini-3-flash',
             contents: instruction,
         });
 
@@ -426,3 +426,4 @@ async function processVideoJob(job) {
 }
 
 module.exports = { processVideoJob };
+

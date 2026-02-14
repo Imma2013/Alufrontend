@@ -34,7 +34,7 @@ async function cleanPrompt(prompt) {
     const instruction = "Rewrite the following prompt to be safe for AI generation. Remove any celebrity names, specific brand names, or copyrighted characters. Replace them with generic descriptions. Keep the artistic style and core intent. Return ONLY the cleaned prompt text.";
 
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3-flash",
       contents: `${instruction}\n\nPrompt: ${prompt}`
     });
 
@@ -255,3 +255,4 @@ async function generateContent(userId, prompt, type, isLongVideo = false, visibi
 }
 
 module.exports = { generateContent, cleanPrompt };
+
