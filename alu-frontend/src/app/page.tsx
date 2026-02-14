@@ -15,7 +15,6 @@ import {
   ProfileIcon,
   CreateIcon,
   SearchIcon,
-  AluLogo,
   AluMark,
 } from './components/icons';
 import HomeTab from './components/tabs/HomeTab';
@@ -44,6 +43,19 @@ interface SearchUserSuggestion {
 interface DMLaunchRequest {
   user: SearchUserSuggestion & { bio: string };
   requestId: number;
+}
+
+function BrandWordmark({ small = false }: { small?: boolean }) {
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <AluMark size={small ? 20 : 26} />
+      <span
+        className={`font-black tracking-tight leading-none text-[var(--alu-primary-dark)] ${small ? 'text-[18px]' : 'text-[28px]'}`}
+      >
+        alu
+      </span>
+    </div>
+  );
 }
 
 function isNameLikeQuery(query: string): boolean {
@@ -360,9 +372,9 @@ export default function App() {
       <div className="min-h-screen bg-[var(--alu-bg)] flex items-center justify-center">
         <div className="text-center px-6 max-w-sm mx-auto animate-fade-in">
           <div className="flex justify-center mb-6">
-            <AluLogo size={40} />
+            <BrandWordmark />
           </div>
-          <h1 className="text-2xl font-bold text-alu-text mb-2">Welcome to Alu</h1>
+          <h1 className="text-2xl font-bold text-alu-text mb-2">Welcome to alu</h1>
           <p className="text-sm text-alu-text-secondary mb-8">The next generation social network powered by AI</p>
           <SignInButton mode="modal">
             <button
@@ -498,8 +510,7 @@ export default function App() {
         <div className="flex items-center h-full px-3 gap-2">
           {/* Logo */}
           <button onClick={() => handleTabChange('home')} className="shrink-0 mr-1 flex items-center gap-1.5">
-            <AluMark size={20} />
-            <span className="text-[18px] font-black tracking-tight text-[var(--alu-primary-dark)] leading-none">alu</span>
+            <BrandWordmark small />
           </button>
 
           {/* Search + AI/Normal toggle — hidden on profile tab (like Instagram) */}
@@ -596,8 +607,7 @@ export default function App() {
         {/* Logo */}
         <div className="h-16 flex items-center px-6">
           <button onClick={() => handleTabChange('home')} className="flex items-center gap-2">
-            <AluMark size={26} />
-            <span className="text-[28px] font-black tracking-tight text-[var(--alu-primary-dark)] leading-none">alu</span>
+            <BrandWordmark />
           </button>
         </div>
 
