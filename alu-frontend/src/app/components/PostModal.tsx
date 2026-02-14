@@ -25,6 +25,11 @@ interface CommentData {
   replies?: CommentData[];
 }
 
+interface MentionSearchUser {
+  userId: string;
+  displayName?: string;
+}
+
 interface PostModalProps {
   post: Post;
   onClose: () => void;
@@ -200,8 +205,8 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
       });
       if (!res.ok) return;
       const data = await res.json();
-      const users = Array.isArray(data.users) ? data.users : [];
-      const exact = users.find((u: { displayName?: string }) => (u.displayName || '').toLowerCase() === handle.toLowerCase());
+      const users: MentionSearchUser[] = Array.isArray(data.users) ? data.users : [];
+      const exact = users.find((u) => (u.displayName || '').toLowerCase() === handle.toLowerCase());
       const target = exact || users[0];
       if (target?.userId) {
         onViewUser(target.userId);

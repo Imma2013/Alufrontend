@@ -218,7 +218,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
       });
       if (!res.ok) return;
       const data = await res.json();
-      const users = Array.isArray(data.users) ? data.users : [];
+      const users: UserResult[] = Array.isArray(data.users) ? data.users : [];
       const exact = users.find((u) => (u.displayName || '').toLowerCase() === handle.toLowerCase());
       const target = exact || users[0];
       if (target?.userId) onViewUser(target.userId);

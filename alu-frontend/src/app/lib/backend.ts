@@ -1,8 +1,8 @@
-export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
-
-if (!BACKEND_URL) {
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+if (!backendUrl) {
   throw new Error('Missing NEXT_PUBLIC_BACKEND_URL. Set it in Vercel environment variables.');
 }
+export const BACKEND_URL: string = backendUrl;
 
 export function ensureBackendUrlNotFrontend(currentOrigin?: string) {
   if (!currentOrigin) return;
