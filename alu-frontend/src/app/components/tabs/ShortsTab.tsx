@@ -30,6 +30,7 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
   const [expandedCaptions, setExpandedCaptions] = useState<Set<string>>(new Set());
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [creatorAvatarByUser, setCreatorAvatarByUser] = useState<Record<string, string>>({});
+  const [followBusyId, setFollowBusyId] = useState<string | null>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
   const touchStartTime = useRef(0);
@@ -47,23 +48,24 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
     setShowComments(false);
   }, [currentIndex]);
 
+  const refreshFollowing = useCallback(async () => {
+    try {
+      if (!user?.id) return;
+      const token = await getToken();
+      const res = await fetch(`${backendUrl}/users/${encodeURIComponent(user.id)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setFollowingIds(new Set((data.following || []) as string[]));
+    } catch {
+      setFollowingIds(new Set());
+    }
+  }, [backendUrl, getToken, user?.id]);
+
   useEffect(() => {
-    const fetchFollowing = async () => {
-      try {
-        if (!user?.id) return;
-        const token = await getToken();
-        const res = await fetch(`${backendUrl}/users/${user.id}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        setFollowingIds(new Set((data.following || []) as string[]));
-      } catch {
-        setFollowingIds(new Set());
-      }
-    };
-    fetchFollowing();
-  }, [user?.id, backendUrl, getToken]);
+    refreshFollowing();
+  }, [refreshFollowing]);
 
   const handleTapVideo = () => {
     const container = videoContainerRef.current;
@@ -143,14 +145,19 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
   useEffect(() => {
     const hydrateCurrentCommentCount = async () => {
       if (!short?._id) return;
+      setCommentCounts((prev) => ({ ...prev, [short._id]: 0 }));
       try {
         const res = await fetch(`${backendUrl}/posts/${short._id}/comments`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          setCommentCounts((prev) => ({ ...prev, [short._id]: 0 }));
+          return;
+        }
         const data = await res.json();
         const comments = Array.isArray(data.comments) ? data.comments : [];
         const total = comments.reduce((sum: number, c: any) => sum + 1 + (Array.isArray(c.replies) ? c.replies.length : 0), 0);
         setCommentCounts((prev) => ({ ...prev, [short._id]: total }));
       } catch {
+        setCommentCounts((prev) => ({ ...prev, [short._id]: 0 }));
       }
     };
     hydrateCurrentCommentCount();
@@ -228,14 +235,16 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
   };
 
   const toggleFollow = async (creatorUserId: string) => {
-    if (!user?.id || creatorUserId === user.id) return;
+    const targetId = (creatorUserId || '').trim();
+    if (!user?.id || !targetId || targetId === user.id) return;
     const token = await getToken();
     if (!token) return;
-    const isFollowing = followingIds.has(creatorUserId);
+    const isFollowing = followingIds.has(targetId);
     const endpoint = isFollowing ? 'unfollow' : 'follow';
+    setFollowBusyId(targetId);
 
     try {
-      const res = await fetch(`${backendUrl}/users/${creatorUserId}/${endpoint}`, {
+      const res = await fetch(`${backendUrl}/users/${encodeURIComponent(targetId)}/${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -246,12 +255,15 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
       if (!res.ok) return;
       setFollowingIds((prev) => {
         const next = new Set(prev);
-        if (isFollowing) next.delete(creatorUserId);
-        else next.add(creatorUserId);
+        if (isFollowing) next.delete(targetId);
+        else next.add(targetId);
         return next;
       });
+      await refreshFollowing();
     } catch (err) {
       console.error('Follow toggle failed:', err);
+    } finally {
+      setFollowBusyId(null);
     }
   };
 
@@ -428,9 +440,10 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
                 {!isOwnShort && short.userId && (
                   <button
                     onClick={() => toggleFollow(short.userId!)}
-                    className="text-white text-sm font-semibold"
+                    disabled={followBusyId === short.userId}
+                    className="text-white text-sm font-semibold disabled:opacity-50"
                   >
-                    {isFollowingCreator ? 'Following' : 'Follow'}
+                    {followBusyId === short.userId ? '...' : isFollowingCreator ? 'Following' : 'Follow'}
                   </button>
                 )}
               </div>
@@ -473,8 +486,8 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
                 }`}>
                   <CommentIcon size={24} />
                 </div>
-                {((commentCounts[short._id] ?? short.commentsCount) || 0) > 0 && (
-                  <span className="text-white text-[11px] font-medium">{commentCounts[short._id] ?? short.commentsCount}</span>
+                {(commentCounts[short._id] || 0) > 0 && (
+                  <span className="text-white text-[11px] font-medium">{commentCounts[short._id]}</span>
                 )}
               </button>
 
