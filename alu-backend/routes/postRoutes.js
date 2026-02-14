@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { Post, Comment, Notification } = require('../config/db');
 const clerkAuth = require('../middleware/clerkAuth');
+const { notifyMentions } = require('../utils/mentions');
 // GET all liked posts for current user
 router.get('/liked', clerkAuth, async (req, res) => {
     try {
@@ -197,6 +198,15 @@ router.post('/:id/comments', clerkAuth, async (req, res) => {
             }
         }
 
+        await notifyMentions({
+            text: text.trim(),
+            authorUserId: userId,
+            authorDisplayName: displayName || '',
+            authorAvatarUrl: avatarUrl || '',
+            postId: post._id,
+            commentId: comment._id,
+        });
+
         res.status(201).json({ comment });
     } catch (err) {
         console.error('Comment error:', err);
@@ -286,6 +296,14 @@ router.put('/:id/caption', clerkAuth, async (req, res) => {
         post.safePrompt = caption;
         post.caption = caption;
         await post.save();
+
+        await notifyMentions({
+            text: caption || '',
+            authorUserId: userId,
+            authorDisplayName: post.displayName || '',
+            authorAvatarUrl: post.avatarUrl || '',
+            postId: post._id,
+        });
 
         res.json({ success: true, post });
     } catch (err) {

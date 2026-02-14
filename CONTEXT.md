@@ -1,5 +1,34 @@
 # Project Alu - Context & Progress
 
+## Current Truth (2026-02-14)
+- Backend and frontend both now fail fast on backend URL misconfig:
+  - Frontend uses `NEXT_PUBLIC_BACKEND_URL` only (no localhost fallback).
+  - If missing or pointed at frontend domain, app throws explicit config error.
+- AI model/runtime truth from backend code:
+  - Text cleanup/orchestration: `GEMINI_TEXT_MODEL` with fallbacks `gemini-3-flash-preview`, `gemini-2.5-flash`.
+  - Image generation: `GEMINI_IMAGE_MODEL` with fallbacks `gemini-2.5-flash-image`, `gemini-3-pro-image-preview`.
+  - Shorts generation: `veo-3.1-fast-generate-preview` fallback `veo-2.0-generate-001`.
+- Daily limits currently enforced in backend:
+  - Free: `3` images/day, `1` short/day.
+  - Pro: `30` images/day, `5` shorts/day.
+  - Bonus packs stack on top via Stripe webhook crediting.
+- Stripe price env mapping in backend:
+  - `STRIPE_PRO_PRICE_ID` (subscription, monthly)
+  - `STRIPE_IMAGE_PRICE_ID` (one-time image credits)
+  - `STRIPE_SHORT_PRICE_ID` (one-time short credit)
+  - Credit amounts from env: `CREDIT_PACK_IMAGES` (default `30`), `CREDIT_PACK_SHORTS` (default `1`)
+- Queue and persistence:
+  - Video jobs are persisted in Mongo (`VideoJob`).
+  - BullMQ + Redis queue is enabled only when `REDIS_URL` is set.
+  - Without Redis, backend falls back to in-process execution.
+- Stories MVP status:
+  - Implemented backend routes: create/list/view/like/reply.
+  - Frontend wired for compose/view/reply and 24h-expiry story sync.
+- Added E2E smoke suite:
+  - `alu-backend/tests/e2e/critical-paths.test.js`
+  - Covers image generate, short generate, checkout creation, webhook path, DM send/read.
+  - Runs against deployed backend with env-driven credentials and explicit opt-in mutating mode.
+
 ## Project Overview
 **Project Name:** Alu
 **Vision:** YouTube + TikTok + Facebook + AI

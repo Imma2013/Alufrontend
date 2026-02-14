@@ -9,7 +9,7 @@ require('dotenv').config();
 const { connectDB, Post, User } = require('./config/db');
 const initCreditGuard = require('./utils/creditGuard');
 const { generateContent } = require('./services/conductor');
-const { createJob, getJob } = require('./services/videoJobs');
+const { createJob, enqueueJob, getJob, startJobWorker, hasQueueRuntime } = require('./services/videoJobs');
 const { processVideoJob } = require('./services/videoStitcher');
 const paymentRoutes = require('./routes/paymentRoutes');
 const syncRoutes = require('./routes/syncRoutes');
@@ -18,6 +18,7 @@ const userRoutes = require('./routes/userRoutes');
 const postRoutes = require('./routes/postRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const dmRoutes = require('./routes/dmRoutes');
+const storyRoutes = require('./routes/storyRoutes');
 const clerkAuth = require('./middleware/clerkAuth');
 
 const app = express();
@@ -77,6 +78,7 @@ app.use('/users', userRoutes);
 app.use('/posts', postRoutes);
 app.use('/notifications', notificationRoutes);
 app.use('/dm', dmRoutes);
+app.use('/stories', storyRoutes);
 
 // This route is now protected. A valid Clerk token is required.
 app.post('/generate', generateLimiter, clerkAuth, async (req, res) => {
@@ -193,7 +195,7 @@ app.post('/generate/short-video', generateLimiter, clerkAuth, async (req, res) =
     }
 
     // Create job with 9:16 aspect ratio for shorts
-    const job = createJob(userId, prompt, duration, visibility || 'everyone', {
+    const job = await createJob(userId, prompt, duration, visibility || 'everyone', {
       aspectRatio: '9:16',
       videoType: 'short',
       useBonusShort,
@@ -201,10 +203,13 @@ app.post('/generate/short-video', generateLimiter, clerkAuth, async (req, res) =
       avatarUrl: avatarUrl || '',
     });
 
-    // Start processing in background (fire and forget)
-    processVideoJob(job).catch(err => {
-      console.error(`Background short video job ${job.jobId} error:`, err);
-    });
+    const queued = await enqueueJob(job.jobId);
+    if (!queued) {
+      // Fallback mode if Redis/BullMQ not configured
+      processVideoJob(job).catch(err => {
+        console.error(`Background short video job ${job.jobId} error:`, err);
+      });
+    }
 
     res.status(202).json({ jobId: job.jobId, status: 'queued' });
   } catch (error) {
@@ -214,7 +219,7 @@ app.post('/generate/short-video', generateLimiter, clerkAuth, async (req, res) =
 });
 
 app.get('/generate/status/:jobId', clerkAuth, async (req, res) => {
-  const job = getJob(req.params.jobId);
+  const job = await getJob(req.params.jobId);
   if (!job) {
     return res.status(404).json({ error: 'Job not found' });
   }
@@ -241,6 +246,10 @@ app.get('/generate/status/:jobId', clerkAuth, async (req, res) => {
 const startServer = async () => {
   try {
     await connectDB();
+    startJobWorker();
+    if (hasQueueRuntime()) {
+      console.log('Video queue enabled: BullMQ + Redis');
+    }
     initCreditGuard();
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
