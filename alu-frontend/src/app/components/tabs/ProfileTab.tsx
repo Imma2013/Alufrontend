@@ -148,18 +148,32 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
       setLoadingFavorites(true);
       try {
         const token = await getToken();
-        if (!token) return;
-
-        const res = await fetch(`${backendUrl}/posts/favorites`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          setFavoritePosts(data.posts || []);
+        if (token) {
+          const res = await fetch(`${backendUrl}/posts/favorites`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setFavoritePosts(data.posts || []);
+            return;
+          }
         }
+
+        // Fallback: derive favorites locally if backend route is not ready yet
+        const local = await db.posts.toArray();
+        setFavoritePosts(
+          local
+            .filter((p) => !!userId && (p.savedBy || []).includes(userId))
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        );
       } catch (err) {
         console.error('Failed to fetch favorites:', err);
+        const local = await db.posts.toArray();
+        setFavoritePosts(
+          local
+            .filter((p) => !!userId && (p.savedBy || []).includes(userId))
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        );
       } finally {
         setLoadingFavorites(false);
       }
@@ -179,18 +193,32 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
       setLoadingLikes(true);
       try {
         const token = await getToken();
-        if (!token) return;
-
-        const res = await fetch(`${backendUrl}/posts/liked`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          setLikedPostsList(data.posts || []);
+        if (token) {
+          const res = await fetch(`${backendUrl}/posts/liked`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setLikedPostsList(data.posts || []);
+            return;
+          }
         }
+
+        // Fallback: derive likes locally if backend route is not ready yet
+        const local = await db.posts.toArray();
+        setLikedPostsList(
+          local
+            .filter((p) => !!userId && (p.likedBy || []).includes(userId))
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        );
       } catch (err) {
         console.error('Failed to fetch liked posts:', err);
+        const local = await db.posts.toArray();
+        setLikedPostsList(
+          local
+            .filter((p) => !!userId && (p.likedBy || []).includes(userId))
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        );
       } finally {
         setLoadingLikes(false);
       }

@@ -24,6 +24,28 @@ router.get('/liked', clerkAuth, async (req, res) => {
     }
 });
 
+router.get('/favorites', clerkAuth, async (req, res) => {
+    try {
+        const userId = req.auth.sub;
+        const posts = await Post.find({ savedBy: userId })
+            .sort({ timestamp: -1 })
+            .limit(100);
+
+        // Add comment counts
+        const postsWithCounts = await Promise.all(
+            posts.map(async (post) => {
+                const commentCount = await Comment.countDocuments({ postId: post._id });
+                return { ...post.toObject(), commentsCount: commentCount };
+            })
+        );
+
+        res.json({ posts: postsWithCounts });
+    } catch (err) {
+        console.error('Get favorites error:', err);
+        res.status(500).json({ error: 'Failed to fetch favorites' });
+    }
+});
+
 // ─── GET single post by ID (public — for share links) ───
 router.get('/:id', async (req, res) => {
     try {
@@ -335,27 +357,8 @@ router.post('/:id/favorite', clerkAuth, async (req, res) => {
 });
 
 // ─── GET all favorited posts for current user ───
-router.get('/favorites', clerkAuth, async (req, res) => {
-    try {
-        const userId = req.auth.sub;
-        const posts = await Post.find({ savedBy: userId })
-            .sort({ timestamp: -1 })
-            .limit(100);
 
-        // Add comment counts
-        const postsWithCounts = await Promise.all(
-            posts.map(async (post) => {
-                const commentCount = await Comment.countDocuments({ postId: post._id });
-                return { ...post.toObject(), commentsCount: commentCount };
-            })
-        );
-
-        res.json({ posts: postsWithCounts });
-    } catch (err) {
-        console.error('Get favorites error:', err);
-        res.status(500).json({ error: 'Failed to fetch favorites' });
-    }
-});
 
 module.exports = router;
+
 
