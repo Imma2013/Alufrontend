@@ -24,9 +24,10 @@ interface CommentsDrawerProps {
     isOpen: boolean;
     onClose: () => void;
     variant?: 'desktop' | 'mobile';
+    disableBackdropBlur?: boolean;
 }
 
-export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'desktop' }: CommentsDrawerProps) {
+export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'desktop', disableBackdropBlur = false }: CommentsDrawerProps) {
     const { getToken } = useAuth();
     const { user } = useUser();
     const [comments, setComments] = useState<CommentData[]>([]);
@@ -539,7 +540,7 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
 
     // Desktop variant: Right side panel
     return createPortal(
-        <div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm animate-fade-in">
+        <div className={`fixed inset-0 z-[100] animate-fade-in ${disableBackdropBlur ? 'bg-black/18' : 'bg-black/40 backdrop-blur-sm'}`}>
             <div
                 ref={drawerRef}
                 className="fixed right-0 top-0 bottom-0 w-[400px] bg-alu-bg shadow-2xl flex flex-col animate-slide-in-right"

@@ -221,14 +221,18 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
   return (
     <div className="w-full h-full min-h-[70vh] flex items-center justify-center animate-fade-in bg-black select-none" onWheel={handleWheel}>
       <div className="relative flex items-center justify-center w-full h-full">
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-4 text-white text-sm font-semibold pointer-events-none">
+          <span className="opacity-70">Following</span>
+          <span className="opacity-100 border-b-2 border-white pb-0.5">For You</span>
+        </div>
         <div
-          className={`relative w-full md:max-w-[420px] mx-auto overflow-hidden transition-all duration-300 ${
-            !isMobile && showComments ? 'md:-translate-x-[210px]' : 'translate-x-0'
+          className={`relative w-full md:max-w-[430px] mx-auto overflow-hidden transition-all duration-300 ${
+            !isMobile && showComments ? 'md:-translate-x-[180px]' : 'translate-x-0'
           }`}
           style={{
             height: isMobile ? 'calc(100vh - 120px)' : 'calc(100vh - 150px)',
             maxHeight: '780px',
-            width: !isMobile && showComments ? '520px' : undefined,
+            width: !isMobile && showComments ? '430px' : undefined,
           }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -242,7 +246,12 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
             }}
           >
             <div className="absolute inset-0" ref={videoContainerRef} onClick={handleTapVideo}>
-              <MediaItem post={short} videoControls={false} autoPlayVideo />
+              <div className="absolute inset-0 scale-110 opacity-55 blur-[18px]">
+                <MediaItem post={short} videoControls={false} autoPlayVideo videoObjectFit="cover" />
+              </div>
+              <div className="absolute inset-0">
+                <MediaItem post={short} videoControls={false} autoPlayVideo videoObjectFit="contain" />
+              </div>
             </div>
 
             {isPaused && (
@@ -357,6 +366,7 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
         isOpen={showComments}
         onClose={() => setShowComments(false)}
         variant={isMobile ? 'mobile' : 'desktop'}
+        disableBackdropBlur
       />
     </div>
   );

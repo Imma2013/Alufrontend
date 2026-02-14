@@ -9,9 +9,15 @@ interface MediaItemProps {
   post: Post;
   videoControls?: boolean;
   autoPlayVideo?: boolean;
+  videoObjectFit?: 'cover' | 'contain';
 }
 
-export default function MediaItem({ post, videoControls = true, autoPlayVideo = false }: MediaItemProps) {
+export default function MediaItem({
+  post,
+  videoControls = true,
+  autoPlayVideo = false,
+  videoObjectFit = 'cover',
+}: MediaItemProps) {
   const [localUrl, setLocalUrl] = useState<string | null>(null);
   const [isRemote, setIsRemote] = useState(false);
 
@@ -72,7 +78,7 @@ export default function MediaItem({ post, videoControls = true, autoPlayVideo = 
           autoPlay={autoPlayVideo}
           loop={autoPlayVideo}
           playsInline
-          className="object-cover w-full h-full"
+          className={`${videoObjectFit === 'contain' ? 'object-contain' : 'object-cover'} w-full h-full`}
         />
       )}
     </>

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@clerk/nextjs';
-import { HeartIcon, CommentIcon, ShareIcon, AluLogo } from '../../components/icons';
+import { HeartIcon, ShareIcon, AluLogo } from '../../components/icons';
 
 interface PostData {
     _id: string;
@@ -31,6 +31,47 @@ interface CommentData {
     createdAt: string;
 }
 
+interface VideoQualityOption {
+    id: string;
+    label: string;
+    src: string;
+}
+
+const buildQualityOptions = (url: string): VideoQualityOption[] => {
+    if (!url || !url.startsWith('http')) return [{ id: 'auto', label: 'Auto', src: url }];
+
+    const uploadToken = '/video/upload/';
+    const uploadIdx = url.indexOf(uploadToken);
+    if (uploadIdx === -1 || !url.includes('res.cloudinary.com')) {
+        return [{ id: 'auto', label: 'Auto', src: url }];
+    }
+
+    const prefix = url.slice(0, uploadIdx + uploadToken.length);
+    const suffix = url.slice(uploadIdx + uploadToken.length);
+    const strippedSuffix = suffix.replace(/^([^/]+)\//, (segment) => {
+        if (segment.includes('q_') || segment.includes('w_') || segment.includes('c_') || segment.includes('f_')) {
+            return '';
+        }
+        return segment;
+    });
+
+    const presets: Array<{ id: string; label: string; transform: string }> = [
+        { id: 'auto', label: 'Auto', transform: 'f_auto,q_auto' },
+        { id: '2160p', label: '2160p (4K)', transform: 'f_auto,q_auto:best,c_limit,w_3840' },
+        { id: '1440p', label: '1440p', transform: 'f_auto,q_auto:best,c_limit,w_2560' },
+        { id: '1080p', label: '1080p', transform: 'f_auto,q_auto:good,c_limit,w_1920' },
+        { id: '720p', label: '720p', transform: 'f_auto,q_auto:good,c_limit,w_1280' },
+        { id: '480p', label: '480p', transform: 'f_auto,q_auto:eco,c_limit,w_854' },
+        { id: '360p', label: '360p', transform: 'f_auto,q_auto:eco,c_limit,w_640' },
+    ];
+
+    return presets.map((preset) => ({
+        id: preset.id,
+        label: preset.label,
+        src: `${prefix}${preset.transform}/${strippedSuffix}`,
+    }));
+};
+
 export default function WatchPage() {
     const params = useParams();
     const router = useRouter();
@@ -47,6 +88,14 @@ export default function WatchPage() {
     const [commentText, setCommentText] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [showDescription, setShowDescription] = useState(false);
+    const [qualityOpen, setQualityOpen] = useState(false);
+    const [qualityOptions, setQualityOptions] = useState<VideoQualityOption[]>([]);
+    const [selectedQuality, setSelectedQuality] = useState<string>('auto');
+    const [videoSrc, setVideoSrc] = useState('');
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const qualityMenuRef = useRef<HTMLDivElement>(null);
+    const pendingSeekRef = useRef<number | null>(null);
+    const resumeAfterSwitchRef = useRef(false);
 
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
@@ -92,6 +141,25 @@ export default function WatchPage() {
         if (postId) fetchData();
     }, [postId, backendUrl, user?.id, getToken]);
 
+    useEffect(() => {
+        if (!post?.contentUrl) return;
+        const options = buildQualityOptions(post.contentUrl);
+        setQualityOptions(options);
+        setSelectedQuality('auto');
+        setVideoSrc(options[0]?.src || post.contentUrl);
+    }, [post?.contentUrl]);
+
+    useEffect(() => {
+        if (!qualityOpen) return;
+        const onClickOutside = (event: MouseEvent) => {
+            if (qualityMenuRef.current && !qualityMenuRef.current.contains(event.target as Node)) {
+                setQualityOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', onClickOutside);
+        return () => document.removeEventListener('mousedown', onClickOutside);
+    }, [qualityOpen]);
+
     const handleLike = async () => {
         const token = await getToken();
         if (!token) return;
@@ -134,6 +202,20 @@ export default function WatchPage() {
             if (navigator.share) await navigator.share({ title: 'Check this out on Alu', url });
             else { await navigator.clipboard.writeText(url); alert('Link copied!'); }
         } catch { /* silent */ }
+    };
+
+    const handleQualityChange = (option: VideoQualityOption) => {
+        if (option.id === selectedQuality || !videoRef.current) {
+            setSelectedQuality(option.id);
+            setQualityOpen(false);
+            return;
+        }
+
+        pendingSeekRef.current = videoRef.current.currentTime;
+        resumeAfterSwitchRef.current = !videoRef.current.paused;
+        setSelectedQuality(option.id);
+        setVideoSrc(option.src);
+        setQualityOpen(false);
     };
 
     const timeAgo = (date: string) => {
@@ -184,12 +266,52 @@ export default function WatchPage() {
                     {/* Video player */}
                     <div className="relative w-full bg-black rounded-xl overflow-hidden" style={{ aspectRatio: post.videoType === 'short' ? '9/16' : '16/9', maxHeight: '70vh' }}>
                         {post.mediaType === 'video' ? (
-                            <video
-                                src={post.contentUrl}
-                                controls
-                                autoPlay
-                                className="w-full h-full object-contain"
-                            />
+                            <>
+                                <video
+                                    ref={videoRef}
+                                    src={videoSrc || post.contentUrl}
+                                    controls
+                                    autoPlay
+                                    className="w-full h-full object-contain"
+                                    onLoadedMetadata={() => {
+                                        if (!videoRef.current) return;
+                                        if (pendingSeekRef.current !== null) {
+                                            videoRef.current.currentTime = pendingSeekRef.current;
+                                            pendingSeekRef.current = null;
+                                        }
+                                        if (resumeAfterSwitchRef.current) {
+                                            void videoRef.current.play().catch(() => {});
+                                            resumeAfterSwitchRef.current = false;
+                                        }
+                                    }}
+                                />
+                                <div className="absolute top-3 right-3 z-10" ref={qualityMenuRef}>
+                                    <button
+                                        onClick={() => setQualityOpen((prev) => !prev)}
+                                        className="h-8 px-2.5 rounded-md bg-black/60 text-white text-xs font-medium hover:bg-black/75 transition-colors"
+                                        aria-label="Video quality"
+                                    >
+                                        {qualityOptions.find((q) => q.id === selectedQuality)?.label || 'Auto'}
+                                    </button>
+                                    {qualityOpen && (
+                                        <div className="absolute right-0 mt-2 w-[148px] rounded-lg bg-[#1f1f1f]/95 border border-white/10 shadow-xl overflow-hidden">
+                                            {qualityOptions.map((option) => (
+                                                <button
+                                                    key={option.id}
+                                                    onClick={() => handleQualityChange(option)}
+                                                    className={`w-full px-3 py-2 text-left text-xs transition-colors ${
+                                                        selectedQuality === option.id
+                                                            ? 'bg-white/10 text-white font-semibold'
+                                                            : 'text-white/85 hover:bg-white/10'
+                                                    }`}
+                                                >
+                                                    {option.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </>
                         ) : (
                             <img src={post.contentUrl} alt={post.safePrompt} className="w-full h-full object-contain" />
                         )}
