@@ -19,6 +19,7 @@ interface ProfileTabProps {
   viewUserId?: string | null;
   onBack?: () => void;
   onViewUser?: (userId: string) => void;
+  onMessageUser?: (user: { userId: string; displayName: string; avatarUrl: string; bio: string }) => void;
 }
 
 interface OtherUserProfile {
@@ -34,7 +35,7 @@ interface OtherUserProfile {
   counts: { posts: number; shorts: number; videos: number };
 }
 
-export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTabProps) {
+export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUser }: ProfileTabProps) {
   const { user } = useUser();
   const { signOut } = useClerk();
   const { getToken } = useAuth();
@@ -426,8 +427,19 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
               >
                 {isFollowing ? 'Following' : 'Follow'}
               </button>
-              <button onClick={handleShareProfile} className="flex-1 py-1.5 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors border border-alu-border">
-                {copiedLink ? 'Copied!' : 'Share Profile'}
+              <button
+                onClick={() => {
+                  if (!viewUserId) return;
+                  onMessageUser?.({
+                    userId: viewUserId,
+                    displayName: otherDisplayName,
+                    avatarUrl: otherUser?.avatarUrl || '',
+                    bio: otherUser?.bio || '',
+                  });
+                }}
+                className="flex-1 py-1.5 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors border border-alu-border"
+              >
+                Message
               </button>
             </>
           )}

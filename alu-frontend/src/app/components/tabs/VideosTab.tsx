@@ -58,6 +58,8 @@ export default function VideosTab({
 
   const [feedMode, setFeedMode] = useState<FeedMode>('for-you');
   const [followingUserIds, setFollowingUserIds] = useState<string[]>([]);
+  const [creatorAvatarByUser, setCreatorAvatarByUser] = useState<Record<string, string>>({});
+  const [followingBusyUserId, setFollowingBusyUserId] = useState<string | null>(null);
   const [durationMap, setDurationMap] = useState<Record<string, string>>({});
   const [hoveredVideoId, setHoveredVideoId] = useState<string | null>(null);
   const [previewSrcMap, setPreviewSrcMap] = useState<Record<string, string>>({});
@@ -107,6 +109,34 @@ export default function VideosTab({
     };
   }, [user?.id, getToken]);
 
+  const toggleFollow = async (creatorUserId: string) => {
+    if (!user?.id || creatorUserId === user.id) return;
+    const token = await getToken();
+    if (!token) return;
+
+    const isFollowing = followingUserIds.includes(creatorUserId);
+    const endpoint = isFollowing ? 'unfollow' : 'follow';
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+    setFollowingBusyUserId(creatorUserId);
+    try {
+      const res = await fetch(`${backendUrl}/users/${creatorUserId}/${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ displayName: user.fullName || '', avatarUrl: user.imageUrl || '' }),
+      });
+      if (!res.ok) return;
+      setFollowingUserIds((prev) =>
+        isFollowing ? prev.filter((id) => id !== creatorUserId) : [...prev, creatorUserId]
+      );
+    } catch {
+    } finally {
+      setFollowingBusyUserId(null);
+    }
+  };
+
   const scopedVideos = useMemo(() => {
     const searched = (videos || []).filter((p: Post) => {
       if (!searchQuery.trim()) return true;
@@ -128,6 +158,40 @@ export default function VideosTab({
       return showNormal;
     });
   }, [videos, searchQuery, feedMode, followingUserIds, showAI, showNormal]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const hydrateCreatorProfiles = async () => {
+      const userIds = Array.from(new Set(scopedVideos.map((p) => p.userId).filter(Boolean)));
+      const missing = userIds.filter((id) => !creatorAvatarByUser[id]);
+      if (missing.length === 0) return;
+
+      try {
+        const token = await getToken();
+        await Promise.all(
+          missing.slice(0, 30).map(async (uid) => {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/users/${uid}`, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            if (!res.ok) return;
+            const profile = await res.json();
+            if (!cancelled) {
+              setCreatorAvatarByUser((prev) => ({ ...prev, [uid]: profile.avatarUrl || '' }));
+            }
+          })
+        );
+      } catch {
+      }
+    };
+
+    if (scopedVideos.length > 0) {
+      void hydrateCreatorProfiles();
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [scopedVideos, creatorAvatarByUser, getToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -259,6 +323,9 @@ export default function VideosTab({
             const previewSrc = previewSrcMap[video._id];
             const isHovered = hoveredVideoId === video._id;
             const likes = Number.isFinite(video.likes) ? (video.likes as number) : 0;
+            const isOwnVideo = video.userId === user?.id;
+            const isFollowingCreator = followingUserIds.includes(video.userId);
+            const creatorAvatar = video.avatarUrl || creatorAvatarByUser[video.userId] || '';
 
             return (
               <button
@@ -314,9 +381,9 @@ export default function VideosTab({
                 </div>
 
                 <div className="flex gap-3 mt-2.5 px-0.5">
-                  {video.avatarUrl ? (
+                  {creatorAvatar ? (
                     <img
-                      src={video.avatarUrl}
+                      src={creatorAvatar}
                       alt=""
                       className="w-9 h-9 rounded-full object-cover shrink-0 mt-0.5 border border-alu-border"
                     />
@@ -332,6 +399,20 @@ export default function VideosTab({
                     <p className="text-[12px] md:text-[13px] text-[#606060] mt-1 line-clamp-1">
                       {video.displayName || 'Alu User'}
                     </p>
+                    {!isOwnVideo && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleFollow(video.userId);
+                        }}
+                        disabled={followingBusyUserId === video.userId}
+                        className="text-[12px] font-semibold text-[#065fd4] hover:text-[#0b57d0] disabled:opacity-50"
+                      >
+                        {isFollowingCreator ? 'Following' : 'Follow'}
+                      </button>
+                    )}
                     <p className="text-xs text-[#606060] mt-0.5">
                       {formatCount(likes)} likes - {timeAgo(video.timestamp)}
                     </p>

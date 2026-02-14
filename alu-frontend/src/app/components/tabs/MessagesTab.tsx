@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { db, DMMessage, DMThread } from '../../db';
@@ -11,6 +11,11 @@ interface UserResult {
   displayName: string;
   avatarUrl: string;
   bio: string;
+}
+
+interface MessagesTabProps {
+  launchRequest?: { user: UserResult; requestId: number } | null;
+  onLaunchHandled?: () => void;
 }
 
 const formatThreadTime = (date: Date) => {
@@ -29,7 +34,7 @@ const formatThreadTime = (date: Date) => {
 const humanTime = (date: Date) =>
   new Date(date).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-export default function MessagesTab() {
+export default function MessagesTab({ launchRequest, onLaunchHandled }: MessagesTabProps) {
   const { getToken } = useAuth();
   const { user } = useUser();
   const myUserId = user?.id || '';
@@ -255,7 +260,7 @@ export default function MessagesTab() {
     });
   }, [normalizedSearch, sortedThreads]);
 
-  const openThread = async (threadId: string) => {
+  const openThread = useCallback(async (threadId: string) => {
     setActiveThreadId(threadId);
     await db.dmThreads.update(threadId, { unreadCount: 0 });
     try {
@@ -268,9 +273,9 @@ export default function MessagesTab() {
       }
     } catch {
     }
-  };
+  }, [backendUrl, getToken]);
 
-  const startThreadWithUser = async (person: UserResult) => {
+  const startThreadWithUser = useCallback(async (person: UserResult) => {
     if (!myUserId) return;
     const existing = await db.dmThreads
       .where('userId')
@@ -330,7 +335,14 @@ export default function MessagesTab() {
 
     setSearch('');
     setResults([]);
-  };
+  }, [backendUrl, getToken, myUserId, openThread]);
+
+  useEffect(() => {
+    if (!launchRequest || !myUserId) return;
+    void startThreadWithUser(launchRequest.user).finally(() => {
+      onLaunchHandled?.();
+    });
+  }, [launchRequest, myUserId, onLaunchHandled, startThreadWithUser]);
 
   const uploadImageToCloudinary = async (file: File): Promise<string> => {
     const formData = new FormData();

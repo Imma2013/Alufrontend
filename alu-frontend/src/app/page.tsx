@@ -38,6 +38,11 @@ interface SearchUserSuggestion {
   avatarUrl: string;
 }
 
+interface DMLaunchRequest {
+  user: SearchUserSuggestion & { bio: string };
+  requestId: number;
+}
+
 function isNameLikeQuery(query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return false;
@@ -88,6 +93,7 @@ export default function App() {
   const { getToken } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [viewUserId, setViewUserId] = useState<string | null>(null);
+  const [dmLaunchRequest, setDmLaunchRequest] = useState<DMLaunchRequest | null>(null);
 
   // Initialize Dexie on mount — handles UpgradeError from primary key change
   useEffect(() => {
@@ -102,6 +108,15 @@ export default function App() {
   const handleTabChange = (tab: Tab) => {
     if (tab !== 'profile') setViewUserId(null);
     setActiveTab(tab);
+  };
+
+  const handleMessageUser = (person: SearchUserSuggestion & { bio: string }) => {
+    setDmLaunchRequest({
+      user: person,
+      requestId: Date.now(),
+    });
+    setViewUserId(null);
+    setActiveTab('messages');
   };
 
   const [showAI, setShowAI] = useState(true);
@@ -704,9 +719,21 @@ export default function App() {
           {activeTab === 'shorts' && <ShortsTab searchQuery={shortsSearchQuery} onViewUser={handleViewUser} />}
           {activeTab === 'videos' && <VideosTab searchQuery={videosSearchQuery} showAI={showAI} showNormal={showNormal} />}
           {activeTab === 'create' && <CreateTab />}
-          {activeTab === 'profile' && <ProfileTab viewUserId={viewUserId} onBack={() => setViewUserId(null)} onViewUser={handleViewUser} />}
+          {activeTab === 'profile' && (
+            <ProfileTab
+              viewUserId={viewUserId}
+              onBack={() => setViewUserId(null)}
+              onViewUser={handleViewUser}
+              onMessageUser={handleMessageUser}
+            />
+          )}
           {activeTab === 'notifications' && <NotificationsTab onReadAll={() => setUnreadNotifications(0)} />}
-          {activeTab === 'messages' && <MessagesTab />}
+          {activeTab === 'messages' && (
+            <MessagesTab
+              launchRequest={dmLaunchRequest}
+              onLaunchHandled={() => setDmLaunchRequest(null)}
+            />
+          )}
         </div>
       </main>
 
