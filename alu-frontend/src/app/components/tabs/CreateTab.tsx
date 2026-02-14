@@ -22,6 +22,8 @@ export default function CreateTab() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
 
   // Long video progress state
   const [videoJobId, setVideoJobId] = useState<string | null>(null);
@@ -36,7 +38,16 @@ export default function CreateTab() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Real usage data
-  const [usage, setUsage] = useState<{ dailyImages: number; dailyShorts: number; bonusImages: number; limits: { image: number; short: number }; isPro: boolean } | null>(null);
+  const [usage, setUsage] = useState<{
+    dailyImages: number;
+    dailyShorts: number;
+    bonusImages: number;
+    bonusShorts: number;
+    remainingImages: number;
+    remainingShorts: number;
+    limits: { image: number; short: number };
+    isPro: boolean;
+  } | null>(null);
 
   useEffect(() => {
     const fetchUsage = async () => {
@@ -54,7 +65,50 @@ export default function CreateTab() {
       }
     };
     fetchUsage();
-  }, [success]); // re-fetch after successful generation
+  }, [success, getToken]); // re-fetch after successful generation
+
+  const handleUpgrade = async (mode: 'subscription' | 'payment' | 'short') => {
+    const token = await getToken();
+    if (!token) return;
+    try {
+      setUpgradeError(null);
+      const proPriceId = process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID;
+      const creditPriceId = process.env.NEXT_PUBLIC_STRIPE_CREDIT_PRICE_ID;
+      const shortPriceId = process.env.NEXT_PUBLIC_STRIPE_SHORT_PRICE_ID;
+      const priceId = mode === 'subscription'
+        ? proPriceId
+        : (mode === 'short' ? shortPriceId : creditPriceId);
+      if (!priceId) {
+        throw new Error(
+          mode === 'subscription'
+            ? 'Stripe Pro price is not configured.'
+            : (mode === 'short'
+              ? 'Stripe short credit price is not configured.'
+              : 'Stripe credit pack price is not configured.')
+        );
+      }
+
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+      const res = await fetch(`${backendUrl}/payments/create-checkout-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ priceId, mode }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Unable to start checkout session.');
+      }
+      if (data.url) {
+        window.location.assign(data.url);
+      } else {
+        throw new Error('Checkout URL missing from server response.');
+      }
+    } catch (err) {
+      console.error('Checkout failed:', err);
+      const message = err instanceof Error ? err.message : 'Checkout failed.';
+      setUpgradeError(message);
+    }
+  };
 
   const types: { key: ContentType; label: string; desc: string; icon: React.ReactNode }[] = [
     { key: 'image', label: 'Image', desc: mode === 'ai' ? 'AI generated' : 'Manual upload', icon: <ImageIcon size={24} /> },
@@ -375,6 +429,25 @@ export default function CreateTab() {
       {/* Header */}
       <h2 className="text-xl font-bold text-alu-text mb-6">Create</h2>
 
+      {/* Upgrade Entry */}
+      <div className="mb-6 p-4 rounded-xl border border-[var(--alu-primary)]/30 bg-gradient-to-r from-[var(--alu-primary-glow)] to-white">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-alu-text">Need more AI credits?</p>
+            <p className="text-xs text-alu-text-secondary mt-1">
+              Free: 3 images/day, 1 short/day. Upgrade to top up more.
+            </p>
+          </div>
+          <button
+            onClick={() => { setUpgradeError(null); setShowUpgradeModal(true); }}
+            className="shrink-0 px-3 py-2 rounded-lg text-xs font-semibold text-white"
+            style={{ background: 'linear-gradient(135deg, var(--alu-primary), var(--alu-primary-light))' }}
+          >
+            Upgrade
+          </button>
+        </div>
+      </div>
+
       {/* Content Type Selector */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         {types.map((t) => (
@@ -486,7 +559,7 @@ export default function CreateTab() {
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-[var(--alu-primary)]">
-                    {Math.max(0, usage.limits.short - usage.dailyShorts)}
+                    {usage.remainingShorts}
                   </div>
                   <div className="text-xs text-alu-text-tertiary">
                     of {usage.limits.short}
@@ -511,8 +584,8 @@ export default function CreateTab() {
               <span className="text-[11px] text-alu-text-tertiary">
                 {usage ? (
                   selectedType === 'image'
-                    ? `${Math.max(0, usage.limits.image - usage.dailyImages)} images left today`
-                    : `${Math.max(0, usage.limits.short - usage.dailyShorts)} shorts left today`
+                    ? `${usage.remainingImages} images available`
+                    : `${usage.remainingShorts} shorts available`
                 ) : 'Loading...'}
                 {' - '}{usage?.isPro ? 'Pro' : 'Free tier'}
               </span>
@@ -617,7 +690,7 @@ export default function CreateTab() {
 
       {/* Submit */}
       {(() => {
-        const canGenerateShort = !usage || selectedType !== 'short' || mode !== 'ai' || usage.dailyShorts < usage.limits.short;
+        const canGenerateShort = !usage || selectedType !== 'short' || mode !== 'ai' || usage.remainingShorts > 0;
         const isDisabled = isLoading || (mode === 'ai' && !prompt.trim()) || (mode === 'upload' && files.length === 0) || !canGenerateShort;
         const tooltipText = !canGenerateShort && selectedType === 'short' && mode === 'ai'
           ? 'Daily shorts limit reached'
@@ -646,6 +719,52 @@ export default function CreateTab() {
           </div>
         );
       })()}
+
+      {/* Upgrade Modal */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4" onClick={() => setShowUpgradeModal(false)}>
+          <div className="bg-white rounded-2xl p-6 max-w-[400px] w-full" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-alu-text text-center mb-1">Upgrade Credits</h3>
+            <p className="text-sm text-alu-text-secondary text-center mb-5">Pay for more AI images and shorts</p>
+
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => handleUpgrade('subscription')}
+                className="w-full py-3 rounded-xl text-sm font-semibold text-white"
+                style={{ background: 'linear-gradient(135deg, var(--alu-primary), var(--alu-primary-light))' }}
+              >
+                Pro Monthly
+                <span className="block text-xs font-normal opacity-80 mt-0.5">Higher daily limits</span>
+              </button>
+              <button
+                onClick={() => handleUpgrade('payment')}
+                className="w-full py-3 rounded-xl text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors"
+              >
+                Credit Pack
+                <span className="block text-xs font-normal text-alu-text-secondary mt-0.5">Adds extra AI image credits</span>
+              </button>
+              <button
+                onClick={() => handleUpgrade('short')}
+                className="w-full py-3 rounded-xl text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors"
+              >
+                Short Credit
+                <span className="block text-xs font-normal text-alu-text-secondary mt-0.5">Adds one extra AI short credit</span>
+              </button>
+            </div>
+
+            {upgradeError && (
+              <p className="mt-3 text-xs text-red-600 text-center">{upgradeError}</p>
+            )}
+
+            <button
+              onClick={() => setShowUpgradeModal(false)}
+              className="w-full mt-3 py-2 text-sm text-alu-text-tertiary hover:text-alu-text transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

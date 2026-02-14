@@ -107,12 +107,20 @@ app.get('/usage', clerkAuth, async (req, res) => {
       { upsert: true, new: true }
     );
     const shortLimit = user.isPro ? 5 : 1;
+    const imageLimit = user.isPro ? 30 : 3;
+    const bonusImages = user.bonusImages || 0;
+    const bonusShorts = user.bonusShorts || 0;
+    const remainingImages = Math.max(0, imageLimit - (user.dailyImages || 0)) + bonusImages;
+    const remainingShorts = Math.max(0, shortLimit - (user.dailyShorts || 0)) + bonusShorts;
     res.json({
       dailyImages: user.dailyImages || 0,
       dailyShorts: user.dailyShorts || 0,
-      bonusImages: user.bonusImages || 0,
+      bonusImages,
+      bonusShorts,
+      remainingImages,
+      remainingShorts,
       limits: {
-        image: user.isPro ? 30 : 3,
+        image: imageLimit,
         short: shortLimit,
       },
       isPro: user.isPro || false,
@@ -173,14 +181,20 @@ app.post('/generate/short-video', generateLimiter, clerkAuth, async (req, res) =
     let user = await User.findOne({ userId });
     if (!user) user = await User.create({ userId, displayName, avatarUrl });
     const shortLimit = user.isPro ? 5 : 1;
+    let useBonusShort = false;
     if ((user.dailyShorts || 0) >= shortLimit) {
-      return res.status(429).json({ error: `Daily shorts limit reached (${shortLimit}/day).` });
+      if ((user.bonusShorts || 0) > 0) {
+        useBonusShort = true;
+      } else {
+        return res.status(429).json({ error: `Daily shorts limit reached (${shortLimit}/day).` });
+      }
     }
 
     // Create job with 9:16 aspect ratio for shorts
     const job = createJob(userId, prompt, duration, visibility || 'everyone', {
       aspectRatio: '9:16',
       videoType: 'short',
+      useBonusShort,
       displayName: displayName || '',
       avatarUrl: avatarUrl || '',
     });

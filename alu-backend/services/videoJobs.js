@@ -22,6 +22,7 @@ function createJob(userId, prompt, durationSeconds, visibility, options = {}) {
         visibility: visibility || 'everyone',
         aspectRatio: options.aspectRatio || '16:9',
         videoType: options.videoType || 'long',
+        useBonusShort: Boolean(options.useBonusShort),
         displayName: options.displayName || '',
         avatarUrl: options.avatarUrl || '',
         status: 'queued',

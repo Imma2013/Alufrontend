@@ -6,16 +6,19 @@ const clerkAuth = require('../middleware/clerkAuth');
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// Credit pack amounts for one-time purchase
-const CREDIT_PACK = {
-  bonusImages: 50,
+// Credit amounts for one-time purchases
+const IMAGE_CREDIT_PACK = {
+  bonusImages: Number(process.env.CREDIT_PACK_IMAGES || 30),
+};
+const SHORT_CREDIT_PACK = {
+  bonusShorts: Number(process.env.CREDIT_PACK_SHORTS || 1),
 };
 
 /**
  * POST /create-checkout-session
  * Creates a Stripe Checkout Session.
- * Body: { userId, priceId, mode }
- *   mode: 'subscription' (Pro monthly) or 'payment' (one-time credit pack)
+ * Body: { priceId, mode }
+ *   mode: 'subscription' (Pro monthly), 'payment' (image credits), or 'short' (short credits)
  */
 router.post('/create-checkout-session', clerkAuth, async (req, res) => {
   const userId = req.auth.sub;
@@ -25,7 +28,17 @@ router.post('/create-checkout-session', clerkAuth, async (req, res) => {
     return res.status(400).json({ error: 'Missing priceId' });
   }
 
-  const checkoutMode = mode === 'payment' ? 'payment' : 'subscription';
+  const purchaseType = mode === 'short'
+    ? 'short_credit'
+    : (mode === 'payment' ? 'image_credit' : 'subscription');
+  const checkoutMode = purchaseType === 'subscription' ? 'subscription' : 'payment';
+  const expectedPriceId = purchaseType === 'subscription'
+    ? process.env.STRIPE_PRO_PRICE_ID
+    : (purchaseType === 'short_credit' ? process.env.STRIPE_SHORT_PRICE_ID : process.env.STRIPE_IMAGE_PRICE_ID);
+
+  if (expectedPriceId && expectedPriceId !== priceId) {
+    return res.status(400).json({ error: 'Invalid priceId for selected purchase mode.' });
+  }
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -42,7 +55,7 @@ router.post('/create-checkout-session', clerkAuth, async (req, res) => {
       client_reference_id: userId,
       metadata: {
         userId: userId,
-        purchaseType: checkoutMode,
+        purchaseType,
       }
     });
 
@@ -84,19 +97,32 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
           { upsert: true }
         );
         console.log(`User ${userId} upgraded to Pro`);
-      } else {
-        // One-time credit pack — add bonus credits
+      } else if (purchaseType === 'short_credit') {
+        // One-time short credit pack
         await User.findOneAndUpdate(
           { userId },
           {
             $inc: {
-              bonusImages: CREDIT_PACK.bonusImages,
+              bonusShorts: SHORT_CREDIT_PACK.bonusShorts,
             },
             stripeCustomerId: session.customer,
           },
           { upsert: true }
         );
-        console.log(`User ${userId} received credit pack: +${CREDIT_PACK.bonusImages} images`);
+        console.log(`User ${userId} received short credit pack: +${SHORT_CREDIT_PACK.bonusShorts} shorts`);
+      } else {
+        // One-time image credit pack
+        await User.findOneAndUpdate(
+          { userId },
+          {
+            $inc: {
+              bonusImages: IMAGE_CREDIT_PACK.bonusImages,
+            },
+            stripeCustomerId: session.customer,
+          },
+          { upsert: true }
+        );
+        console.log(`User ${userId} received image credit pack: +${IMAGE_CREDIT_PACK.bonusImages} images`);
       }
       break;
     }

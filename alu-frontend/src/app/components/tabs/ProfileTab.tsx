@@ -50,8 +50,6 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
   const [profileShowNormal, setProfileShowNormal] = useState(true);
   const [copiedLink, setCopiedLink] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [menuPost, setMenuPost] = useState<Post | null>(null);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [deletingPost, setDeletingPost] = useState<Post | null>(null);
@@ -314,43 +312,6 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
     }
   };
 
-  const handleUpgrade = async (mode: 'subscription' | 'payment') => {
-    const token = await getToken();
-    if (!token) return;
-    try {
-      setUpgradeError(null);
-      const proPriceId = process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID;
-      const creditPriceId = process.env.NEXT_PUBLIC_STRIPE_CREDIT_PRICE_ID;
-      const priceId = mode === 'subscription' ? proPriceId : creditPriceId;
-      if (!priceId) {
-        throw new Error(
-          mode === 'subscription'
-            ? 'Stripe Pro price is not configured.'
-            : 'Stripe credit pack price is not configured.'
-        );
-      }
-
-      const res = await fetch(`${backendUrl}/payments/create-checkout-session`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ priceId, mode }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error || 'Unable to start checkout session.');
-      }
-      if (data.url) {
-        window.location.assign(data.url);
-      } else {
-        throw new Error('Checkout URL missing from server response.');
-      }
-    } catch (err) {
-      console.error('Checkout failed:', err);
-      const message = err instanceof Error ? err.message : 'Checkout failed.';
-      setUpgradeError(message);
-    }
-  };
-
   if (!isOwnProfile && loadingProfile) {
     return (
       <div className="w-full max-w-[600px] mx-auto animate-fade-in">
@@ -477,15 +438,6 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
       {isOwnProfile && showSettings && (
         <div className="mx-4 mb-4 p-2 bg-alu-surface rounded-xl animate-fade-in">
           <button
-            onClick={() => { setUpgradeError(null); setShowUpgradeModal(true); setShowSettings(false); }}
-            className="w-full text-left px-3 py-2.5 text-sm text-alu-text hover:bg-alu-hover rounded-lg transition-colors flex items-center gap-2.5"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-            </svg>
-            Upgrade to Pro
-          </button>
-          <button
             onClick={() => { setShowPrivacy(true); setShowSettings(false); }}
             className="w-full text-left px-3 py-2.5 text-sm text-alu-text hover:bg-alu-hover rounded-lg transition-colors flex items-center gap-2.5"
           >
@@ -508,45 +460,6 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
           </button>
         </div>
       )}
-
-      {/* Upgrade Modal */}
-      {showUpgradeModal && (
-        <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4" onClick={() => setShowUpgradeModal(false)}>
-          <div className="bg-white rounded-2xl p-6 max-w-[400px] w-full" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-alu-text text-center mb-1">Upgrade Your Plan</h3>
-            <p className="text-sm text-alu-text-secondary text-center mb-5">Get more out of Alu</p>
-
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => handleUpgrade('subscription')}
-                className="w-full py-3 rounded-xl text-sm font-semibold text-white"
-                style={{ background: 'linear-gradient(135deg, var(--alu-primary), var(--alu-primary-light))' }}
-              >
-                Pro Monthly — $10/mo
-                <span className="block text-xs font-normal opacity-80 mt-0.5">10x daily limits for everything</span>
-              </button>
-              <button
-                onClick={() => handleUpgrade('payment')}
-                className="w-full py-3 rounded-xl text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors"
-              >
-                Credit Pack — $10
-                <span className="block text-xs font-normal text-alu-text-secondary mt-0.5">+50 images, +20 shorts, +10 videos</span>
-              </button>
-            </div>
-            {upgradeError && (
-              <p className="mt-3 text-xs text-red-600 text-center">{upgradeError}</p>
-            )}
-
-            <button
-              onClick={() => setShowUpgradeModal(false)}
-              className="w-full mt-3 py-2 text-sm text-alu-text-tertiary hover:text-alu-text transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Overlays (own profile only) */}
       {isOwnProfile && showPrivacy && <PrivacyPolicy onBack={() => setShowPrivacy(false)} />}
       {isOwnProfile && showTerms && <TermsConditions onBack={() => setShowTerms(false)} />}
@@ -706,3 +619,4 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser }: ProfileTa
     </div>
   );
 }
+

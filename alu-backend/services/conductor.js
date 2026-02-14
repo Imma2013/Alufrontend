@@ -197,7 +197,7 @@ async function generateContent(userId, prompt, type, isLongVideo = false, visibi
 
     } else if (type === 'video' && !isLongVideo) {
       const veoModels = [
-        { model: 'veo-3.1-generate-preview', name: 'Google Veo 3.1' },
+        { model: 'veo-3.1-fast-generate-preview', name: 'Google Veo 3.1' },
         { model: 'veo-2.0-generate-001', name: 'Google Veo 2.0' },
       ];
 
@@ -319,3 +319,4 @@ async function generateContent(userId, prompt, type, isLongVideo = false, visibi
 }
 
 module.exports = { generateContent, cleanPrompt };
+
