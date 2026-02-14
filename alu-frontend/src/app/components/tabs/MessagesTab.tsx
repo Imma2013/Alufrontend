@@ -238,6 +238,22 @@ export default function MessagesTab() {
     () => (threads || []).find((thread) => thread._id === activeThreadId) || null,
     [threads, activeThreadId]
   );
+  const normalizedSearch = search.trim().toLowerCase();
+  const sortedThreads = useMemo(
+    () =>
+      (threads || [])
+        .slice()
+        .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()),
+    [threads]
+  );
+  const visibleThreads = useMemo(() => {
+    if (!normalizedSearch) return sortedThreads;
+    return sortedThreads.filter((thread) => {
+      const name = (thread.participantName || '').toLowerCase();
+      const lastMessage = (thread.lastMessage || '').toLowerCase();
+      return name.includes(normalizedSearch) || lastMessage.includes(normalizedSearch);
+    });
+  }, [normalizedSearch, sortedThreads]);
 
   const openThread = async (threadId: string) => {
     setActiveThreadId(threadId);
@@ -433,7 +449,20 @@ export default function MessagesTab() {
       {!showThreadOnMobile && (
         <section className="w-full md:w-[380px] md:min-w-[380px] border-r border-[#efefef] flex flex-col">
           <div className="px-4 pt-4 pb-3 border-b border-[#efefef]">
-            <h2 className="text-[20px] font-bold text-[#262626] mb-3">Messages</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-[20px] font-bold text-[#262626]">Messages</h2>
+              {search.trim() && (
+                <button
+                  onClick={() => {
+                    setSearch('');
+                    setResults([]);
+                  }}
+                  className="text-xs font-semibold text-[#0095f6]"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
             <div className="relative">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8e8e8e]">
                 <SearchIcon size={16} />
@@ -451,6 +480,9 @@ export default function MessagesTab() {
           <div className="flex-1 overflow-y-auto">
             {search.trim() && (
               <div className="border-b border-[#efefef]">
+                <p className="px-4 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-[#8e8e8e] uppercase">
+                  Start new chat
+                </p>
                 {isSearching && <p className="px-4 py-3 text-xs text-[#8e8e8e]">Searching...</p>}
                 {results.map((person) => (
                   <button
@@ -471,13 +503,16 @@ export default function MessagesTab() {
                     </div>
                   </button>
                 ))}
+                {!isSearching && results.length === 0 && (
+                  <p className="px-4 pb-3 text-xs text-[#8e8e8e]">No users found.</p>
+                )}
               </div>
             )}
 
-            {(threads || [])
-              .slice()
-              .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
-              .map((thread) => (
+            <p className="px-4 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-[#8e8e8e] uppercase">
+              Chats
+            </p>
+            {visibleThreads.map((thread) => (
                 <button
                   key={thread._id}
                   onClick={() => openThread(thread._id)}
@@ -510,6 +545,9 @@ export default function MessagesTab() {
                 <p className="text-base font-semibold text-[#262626] mb-1">Your messages</p>
                 <p className="text-sm text-[#8e8e8e]">Search someone to start chatting</p>
               </div>
+            )}
+            {search.trim() && results.length > 0 && visibleThreads.length === 0 && (
+              <p className="px-4 py-3 text-xs text-[#8e8e8e]">No existing chats match this search.</p>
             )}
           </div>
         </section>
