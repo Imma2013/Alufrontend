@@ -431,7 +431,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
                   Reply
                 </button>
               )}
-              {c.userId === user?.id && (
+              {(c.userId === user?.id || isOwner) && (
                 <button
                   onClick={() => deleteComment(c._id, isReply, parentId)}
                   className="text-xs font-semibold text-[#8e8e8e] hover:text-red-500 transition-colors"

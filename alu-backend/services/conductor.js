@@ -2,7 +2,7 @@ const { GoogleGenAI } = require('@google/genai');
 const axios = require('axios');
 const { PostHog } = require('posthog-node');
 const { v2: cloudinary } = require('cloudinary');
-const { User, Post } = require('../config/db');
+const { User, Post, Notification } = require('../config/db');
 
 // Initialize PostHog
 const posthog = new PostHog(process.env.POSTHOG_API_KEY, {
@@ -25,24 +25,44 @@ const LIMITS = {
   imageProDaily: 30,
   shortFreeDaily: 1,
   shortProDaily: 5,
-  long: 0, // killed
+  long: 0, // disabled
 };
 
+const TEXT_MODEL_FALLBACKS = ['gemini-3-flash-preview', 'gemini-2.5-flash'];
+const IMAGE_MODEL_FALLBACKS = ['gemini-2.5-flash-image', 'gemini-3-pro-image-preview'];
+
+function modelCandidates(primary, fallbacks) {
+  const candidates = [primary, ...fallbacks].filter(Boolean);
+  return [...new Set(candidates)];
+}
+
+async function generateTextWithFallback(contents) {
+  const candidates = modelCandidates(process.env.GEMINI_TEXT_MODEL, TEXT_MODEL_FALLBACKS);
+  let lastErr = null;
+
+  for (const model of candidates) {
+    try {
+      const response = await ai.models.generateContent({ model, contents });
+      return response?.text?.trim?.() || '';
+    } catch (err) {
+      lastErr = err;
+      console.warn(`Text model ${model} failed:`, err.message);
+    }
+  }
+
+  throw lastErr || new Error('No text model candidates available.');
+}
+
 /**
- * Clean the prompt using Gemini 2.0 Flash to remove brands/celebrities.
+ * Clean the prompt using Gemini to remove brands/celebrities.
  */
 async function cleanPrompt(prompt) {
   try {
-    const instruction = "Rewrite the following prompt to be safe for AI generation. Remove any celebrity names, specific brand names, or copyrighted characters. Replace them with generic descriptions. Keep the artistic style and core intent. Return ONLY the cleaned prompt text.";
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash",
-      contents: `${instruction}\n\nPrompt: ${prompt}`
-    });
-
-    return response.text.trim();
+    const instruction = 'Rewrite the following prompt to be safe for AI generation. Remove any celebrity names, specific brand names, or copyrighted characters. Replace them with generic descriptions. Keep the artistic style and core intent. Return ONLY the cleaned prompt text.';
+    const cleaned = await generateTextWithFallback(`${instruction}\n\nPrompt: ${prompt}`);
+    return cleaned || prompt;
   } catch (error) {
-    console.error("Prompt cleaning failed, using original:", error.message);
+    console.error('Prompt cleaning failed, using original:', error.message);
     return prompt;
   }
 }
@@ -95,28 +115,34 @@ async function generateContent(userId, prompt, type, isLongVideo = false, visibi
   if (!user) {
     user = await User.create({ userId, displayName, avatarUrl });
   } else if (displayName && displayName !== user.displayName) {
-    // Sync profile info to User record so they're searchable
+    // Sync profile info to User record so they are searchable
     user.displayName = displayName;
     if (avatarUrl) user.avatarUrl = avatarUrl;
     await user.save();
   }
 
-  // Limit checking
+  let useBonusImage = false;
+  let useBonusShort = false;
+
   if (type === 'image') {
-    // Images: daily, Free gets 3, Pro gets 30, bonus credits stack
     const baseLimit = user.isPro ? LIMITS.imageProDaily : LIMITS.imageFreeDaily;
-    const bonus = user.bonusImages || 0;
-    if (user.dailyImages >= baseLimit + bonus) {
-      throw new Error('429: Daily image limit reached.');
+    if (user.dailyImages >= baseLimit) {
+      if ((user.bonusImages || 0) > 0) {
+        useBonusImage = true;
+      } else {
+        throw new Error('429: Daily image limit reached.');
+      }
     }
   } else if (type === 'video' && !isLongVideo) {
-    // Shorts: daily, Free gets 1/day, Pro gets 5/day
     const shortLimit = user.isPro ? LIMITS.shortProDaily : LIMITS.shortFreeDaily;
     if ((user.dailyShorts || 0) >= shortLimit) {
-      throw new Error(`429: Daily shorts limit reached (${shortLimit}/day).`);
+      if ((user.bonusShorts || 0) > 0) {
+        useBonusShort = true;
+      } else {
+        throw new Error(`429: Daily shorts limit reached (${shortLimit}/day).`);
+      }
     }
   } else if (type === 'video' && isLongVideo) {
-    // Long videos: killed
     throw new Error('410: Long video generation is temporarily disabled.');
   }
 
@@ -130,11 +156,10 @@ async function generateContent(userId, prompt, type, isLongVideo = false, visibi
 
   try {
     if (type === 'image') {
-      // --- IMAGE: Gemini image models (fallback chain) ---
-      const imageModels = [
-        { id: 'gemini-3-flash', name: 'NanoBanana Flash' },
-        { id: 'gemini-3-flash', name: 'Gemini Flash 2.0' },
-      ];
+      const imageModels = modelCandidates(process.env.GEMINI_IMAGE_MODEL, IMAGE_MODEL_FALLBACKS).map((id) => ({
+        id,
+        name: id,
+      }));
 
       let imageError = null;
       for (const imageModel of imageModels) {
@@ -171,7 +196,6 @@ async function generateContent(userId, prompt, type, isLongVideo = false, visibi
       }
 
     } else if (type === 'video' && !isLongVideo) {
-      // --- SHORT VIDEO: Try Veo 3.1, fallback to Veo 2.0 ---
       const veoModels = [
         { model: 'veo-3.1-generate-preview', name: 'Google Veo 3.1' },
         { model: 'veo-2.0-generate-001', name: 'Google Veo 2.0' },
@@ -189,15 +213,14 @@ async function generateContent(userId, prompt, type, isLongVideo = false, visibi
             model: modelName,
             prompt: safePrompt,
             config: {
-              aspectRatio: "9:16",
+              aspectRatio: '9:16',
               durationSeconds: 8,
             }
           });
 
-          // Poll for completion
           let result = operation;
           let attempts = 0;
-          const maxAttempts = 60; // 5 minutes max (5s intervals)
+          const maxAttempts = 60;
 
           while (!result.done && attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 5000));
@@ -216,7 +239,6 @@ async function generateContent(userId, prompt, type, isLongVideo = false, visibi
 
           const videoData = result.response.generatedVideos[0].video;
 
-          // Upload video to Cloudinary
           let videoSource;
           if (videoData.uri) {
             videoSource = videoData.uri;
@@ -231,31 +253,26 @@ async function generateContent(userId, prompt, type, isLongVideo = false, visibi
           thumbnailUrl = cloudResult.thumbnailUrl;
           console.log(`Video uploaded to Cloudinary via ${veo.name}: ${contentUrl}`);
 
-          videoGenError = null; // Success — clear any previous error
-          break; // Exit the fallback loop on success
+          videoGenError = null;
+          break;
 
         } catch (veoErr) {
           console.error(`${veo.name} failed:`, veoErr.message);
           videoGenError = veoErr;
-          // Continue to next model in fallback chain
         }
       }
 
       if (videoGenError) {
         throw new Error(`All video models failed. Last error: ${videoGenError.message}`);
       }
-
-    } else if (type === 'video' && isLongVideo) {
-      // --- LONG VIDEO: Not available via simple generation ---
-      // Long videos use the stitching pipeline (Phase 3)
-      throw new Error('Long video generation uses the video stitching pipeline. Use POST /generate/long-video instead.');
     }
 
-    // Increment usage counter
     if (type === 'image') {
       user.dailyImages += 1;
+      if (useBonusImage) user.bonusImages = Math.max(0, (user.bonusImages || 0) - 1);
     } else if (type === 'video' && !isLongVideo) {
       user.dailyShorts = (user.dailyShorts || 0) + 1;
+      if (useBonusShort) user.bonusShorts = Math.max(0, (user.bonusShorts || 0) - 1);
     }
     await user.save();
 
@@ -269,6 +286,23 @@ async function generateContent(userId, prompt, type, isLongVideo = false, visibi
       displayName: displayName || '',
       avatarUrl: avatarUrl || '',
     });
+
+    if (type === 'video' && (visibility || 'everyone') !== 'private') {
+      const followers = (user.followers || []).filter((followerId) => followerId !== userId);
+      if (followers.length > 0) {
+        await Notification.insertMany(
+          followers.map((followerId) => ({
+            userId: followerId,
+            type: 'new_post',
+            fromUserId: userId,
+            fromDisplayName: displayName || user.displayName || '',
+            fromAvatarUrl: avatarUrl || user.avatarUrl || '',
+            postId: newPost._id,
+          })),
+          { ordered: false }
+        );
+      }
+    }
 
     posthog.capture({
       distinctId: userId,
@@ -285,4 +319,3 @@ async function generateContent(userId, prompt, type, isLongVideo = false, visibi
 }
 
 module.exports = { generateContent, cleanPrompt };
-

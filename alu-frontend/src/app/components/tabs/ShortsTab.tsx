@@ -10,15 +10,18 @@ import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon, ShortsIcon } from '../
 
 interface ShortsTabProps {
   searchQuery?: string;
+  onViewUser?: (userId: string) => void;
 }
 
-export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
+export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabProps) {
   const MAX_CAPTION_CHARS = 95;
   const { getToken } = useAuth();
   const { user } = useUser();
+  const [feedMode, setFeedMode] = useState<'for-you' | 'following'>('for-you');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [liked, setLiked] = useState<Set<string>>(new Set());
   const [saved, setSaved] = useState<Set<string>>(new Set());
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -28,6 +31,7 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
   const touchStartTime = useRef(0);
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -40,6 +44,24 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
     setIsPaused(false);
     setShowComments(false);
   }, [currentIndex]);
+
+  useEffect(() => {
+    const fetchFollowing = async () => {
+      try {
+        if (!user?.id) return;
+        const token = await getToken();
+        const res = await fetch(`${backendUrl}/users/${user.id}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setFollowingIds(new Set((data.following || []) as string[]));
+      } catch {
+        setFollowingIds(new Set());
+      }
+    };
+    fetchFollowing();
+  }, [user?.id, backendUrl, getToken]);
 
   const handleTapVideo = () => {
     const container = videoContainerRef.current;
@@ -73,8 +95,20 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
       return p.safePrompt?.toLowerCase().includes(q) || p.displayName?.toLowerCase().includes(q);
     }) || [];
 
-  const shortsList = shorts;
+  const shortsList = feedMode === 'following'
+    ? shorts.filter((p) => !!p.userId && followingIds.has(p.userId))
+    : shorts;
   const short = shortsList[currentIndex];
+
+  useEffect(() => {
+    setCurrentIndex(0);
+  }, [feedMode, searchQuery]);
+
+  useEffect(() => {
+    if (currentIndex >= shortsList.length) {
+      setCurrentIndex(0);
+    }
+  }, [currentIndex, shortsList.length]);
 
   const toggleLike = async () => {
     if (!short) return;
@@ -147,6 +181,34 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
     }
   };
 
+  const toggleFollow = async (creatorUserId: string) => {
+    if (!user?.id || creatorUserId === user.id) return;
+    const token = await getToken();
+    if (!token) return;
+    const isFollowing = followingIds.has(creatorUserId);
+    const endpoint = isFollowing ? 'unfollow' : 'follow';
+
+    try {
+      const res = await fetch(`${backendUrl}/users/${creatorUserId}/${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ displayName: user.fullName || '', avatarUrl: user.imageUrl || '' }),
+      });
+      if (!res.ok) return;
+      setFollowingIds((prev) => {
+        const next = new Set(prev);
+        if (isFollowing) next.delete(creatorUserId);
+        else next.add(creatorUserId);
+        return next;
+      });
+    } catch (err) {
+      console.error('Follow toggle failed:', err);
+    }
+  };
+
   const goNext = useCallback(() => {
     if (currentIndex < shortsList.length - 1) setCurrentIndex((prev) => prev + 1);
   }, [currentIndex, shortsList.length]);
@@ -200,11 +262,29 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
     return (
       <div className="w-full h-full min-h-[70vh] flex items-center justify-center animate-fade-in bg-[#0a0a0a]">
         <div className="text-center py-16 px-5">
+          <div className="flex items-center justify-center gap-4 text-white text-sm font-semibold mb-6">
+            <button
+              onClick={() => setFeedMode('following')}
+              className={`${feedMode === 'following' ? 'opacity-100 border-b-2 border-white pb-0.5' : 'opacity-70 hover:opacity-90'}`}
+            >
+              Following
+            </button>
+            <button
+              onClick={() => setFeedMode('for-you')}
+              className={`${feedMode === 'for-you' ? 'opacity-100 border-b-2 border-white pb-0.5' : 'opacity-70 hover:opacity-90'}`}
+            >
+              For You
+            </button>
+          </div>
           <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-4 text-white/85">
             <ShortsIcon size={28} />
           </div>
-          <p className="text-sm font-semibold text-white mb-1">No reels yet</p>
-          <p className="text-xs text-white/65">Post a short video to start this feed</p>
+          <p className="text-sm font-semibold text-white mb-1">
+            {feedMode === 'following' ? 'No shorts from people you follow yet' : 'No reels yet'}
+          </p>
+          <p className="text-xs text-white/65">
+            {feedMode === 'following' ? 'Switch to For You or follow more creators' : 'Post a short video to start this feed'}
+          </p>
         </div>
       </div>
     );
@@ -217,13 +297,25 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
   const isCaptionLong = rawCaption.length > MAX_CAPTION_CHARS;
   const isCaptionExpanded = expandedCaptions.has(shortKey);
   const visibleCaption = isCaptionLong && !isCaptionExpanded ? `${rawCaption.slice(0, MAX_CAPTION_CHARS).trimEnd()}...` : rawCaption;
+  const isFollowingCreator = !!short.userId && followingIds.has(short.userId);
+  const isOwnShort = short.userId === user?.id;
 
   return (
     <div className="w-full h-full min-h-[70vh] flex items-center justify-center animate-fade-in bg-black select-none" onWheel={handleWheel}>
       <div className="relative flex items-center justify-center w-full h-full">
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-4 text-white text-sm font-semibold pointer-events-none">
-          <span className="opacity-70">Following</span>
-          <span className="opacity-100 border-b-2 border-white pb-0.5">For You</span>
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-4 text-white text-sm font-semibold">
+          <button
+            onClick={() => setFeedMode('following')}
+            className={`${feedMode === 'following' ? 'opacity-100 border-b-2 border-white pb-0.5' : 'opacity-70 hover:opacity-90'}`}
+          >
+            Following
+          </button>
+          <button
+            onClick={() => setFeedMode('for-you')}
+            className={`${feedMode === 'for-you' ? 'opacity-100 border-b-2 border-white pb-0.5' : 'opacity-70 hover:opacity-90'}`}
+          >
+            For You
+          </button>
         </div>
         <div
           className={`relative w-full md:max-w-[430px] mx-auto overflow-hidden transition-all duration-300 ${
@@ -267,15 +359,33 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
             <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent pointer-events-none" />
 
             <div className="absolute bottom-0 left-0 right-16 p-4 pointer-events-none">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 pointer-events-auto">
                 {short.avatarUrl ? (
-                  <img src={short.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-white/60" />
+                  <button onClick={() => short.userId && onViewUser?.(short.userId)}>
+                    <img src={short.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-white/60" />
+                  </button>
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white text-xs font-bold border border-white/60">
+                  <button
+                    onClick={() => short.userId && onViewUser?.(short.userId)}
+                    className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white text-xs font-bold border border-white/60"
+                  >
                     {(short.displayName || short.userId || 'U')[0].toUpperCase()}
-                  </div>
+                  </button>
                 )}
-                <span className="text-white font-semibold text-sm">{short.displayName || 'Alu User'}</span>
+                <button
+                  onClick={() => short.userId && onViewUser?.(short.userId)}
+                  className="text-white font-semibold text-sm"
+                >
+                  {short.displayName || 'Alu User'}
+                </button>
+                {!isOwnShort && short.userId && (
+                  <button
+                    onClick={() => toggleFollow(short.userId!)}
+                    className="text-white text-sm font-semibold"
+                  >
+                    {isFollowingCreator ? 'Following' : 'Follow'}
+                  </button>
+                )}
               </div>
 
               {rawCaption && (
@@ -300,13 +410,17 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
                 </p>
               )}
 
-              {short.is_ai && (
-                <span className="inline-block mt-2 text-[10px] font-bold px-2 py-0.5 rounded bg-white/20 text-white backdrop-blur-sm">AI</span>
-              )}
             </div>
 
             <div className="absolute bottom-20 right-3 flex flex-col items-center gap-5">
-              <button className="relative" onClick={(e) => e.stopPropagation()} aria-label="Creator profile">
+              <button
+                className="relative"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (short.userId) onViewUser?.(short.userId);
+                }}
+                aria-label="Creator profile"
+              >
                 {short.avatarUrl ? (
                   <img src={short.avatarUrl} alt="" className="w-11 h-11 rounded-full object-cover border-2 border-white/90" />
                 ) : (
@@ -314,9 +428,6 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
                     {(short.displayName || short.userId || 'U')[0].toUpperCase()}
                   </div>
                 )}
-                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white text-black text-xs leading-5 text-center font-bold">
-                  +
-                </span>
               </button>
 
               <button onClick={(e) => { e.stopPropagation(); toggleLike(); }} className="flex flex-col items-center gap-1">
@@ -367,6 +478,7 @@ export default function ShortsTab({ searchQuery = '' }: ShortsTabProps) {
         onClose={() => setShowComments(false)}
         variant={isMobile ? 'mobile' : 'desktop'}
         disableBackdropBlur
+        postOwnerId={short?.userId}
       />
     </div>
   );

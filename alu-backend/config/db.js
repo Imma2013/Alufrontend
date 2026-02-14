@@ -16,6 +16,7 @@ const UserSchema = new mongoose.Schema({
   subscriptionId: { type: String },
   stripeCustomerId: { type: String },
   bonusImages: { type: Number, default: 0 },
+  bonusShorts: { type: Number, default: 0 },
   followers: [{ type: String }],
   following: [{ type: String }],
 });
@@ -59,7 +60,7 @@ const CommentSchema = new mongoose.Schema({
 // Notification Schema
 const NotificationSchema = new mongoose.Schema({
   userId: { type: String, required: true, index: true }, // who receives this
-  type: { type: String, enum: ['like', 'comment', 'follow', 'comment_like', 'reply'], required: true },
+  type: { type: String, enum: ['like', 'comment', 'follow', 'comment_like', 'reply', 'new_post'], required: true },
   fromUserId: { type: String, required: true },
   fromDisplayName: { type: String, default: '' },
   fromAvatarUrl: { type: String, default: '' },

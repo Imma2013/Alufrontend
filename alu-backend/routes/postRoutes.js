@@ -206,14 +206,22 @@ router.post('/:postId/comments/:commentId/like', clerkAuth, async (req, res) => 
     }
 });
 
-// ─── DELETE a comment (only by author) ───
+// ─── DELETE a comment (by comment author or post owner) ───
 router.delete('/:postId/comments/:commentId', clerkAuth, async (req, res) => {
     try {
         const userId = req.auth.sub;
+        const post = await Post.findById(req.params.postId);
+        if (!post) return res.status(404).json({ error: 'Post not found' });
+
         const comment = await Comment.findById(req.params.commentId);
         if (!comment) return res.status(404).json({ error: 'Comment not found' });
-        if (comment.userId !== userId) return res.status(403).json({ error: 'Not your comment' });
+        const isCommentOwner = comment.userId === userId;
+        const isPostOwner = post.userId === userId;
+        if (!isCommentOwner && !isPostOwner) {
+            return res.status(403).json({ error: 'Not authorized to delete this comment' });
+        }
 
+        await Comment.deleteMany({ parentCommentId: comment._id });
         await comment.deleteOne();
         res.json({ deleted: true });
     } catch (err) {

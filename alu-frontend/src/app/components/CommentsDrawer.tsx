@@ -25,9 +25,17 @@ interface CommentsDrawerProps {
     onClose: () => void;
     variant?: 'desktop' | 'mobile';
     disableBackdropBlur?: boolean;
+    postOwnerId?: string;
 }
 
-export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'desktop', disableBackdropBlur = false }: CommentsDrawerProps) {
+export default function CommentsDrawer({
+    postId,
+    isOpen,
+    onClose,
+    variant = 'desktop',
+    disableBackdropBlur = false,
+    postOwnerId,
+}: CommentsDrawerProps) {
     const { getToken } = useAuth();
     const { user } = useUser();
     const [comments, setComments] = useState<CommentData[]>([]);
@@ -48,6 +56,7 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+    const canModerate = !!user?.id && !!postOwnerId && user.id === postOwnerId;
 
     useEffect(() => {
         setMounted(true);
@@ -373,7 +382,7 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
                                     Reply
                                 </button>
                             )}
-                            {c.userId === user?.id && (
+                            {(c.userId === user?.id || canModerate) && (
                                 <button
                                     onClick={() => handleDelete(c._id, isReply, parentId)}
                                     className="text-xs font-semibold text-alu-text-tertiary hover:text-red-500 transition-colors"

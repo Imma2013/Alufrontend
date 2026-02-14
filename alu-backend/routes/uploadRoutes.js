@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const { v2: cloudinary } = require('cloudinary');
 const clerkAuth = require('../middleware/clerkAuth');
-const { Post, User } = require('../config/db');
+const { Post, User, Notification } = require('../config/db');
 
 const router = express.Router();
 
@@ -139,6 +139,25 @@ router.post(
       displayName: displayName || '',
       avatarUrl: avatarUrl || '',
     });
+
+    // Notify followers when a new video is posted
+    if (mediaType === 'video' && visibility !== 'private') {
+      const creator = await User.findOne({ userId });
+      const followers = (creator?.followers || []).filter((followerId) => followerId !== userId);
+      if (followers.length > 0) {
+        await Notification.insertMany(
+          followers.map((followerId) => ({
+            userId: followerId,
+            type: 'new_post',
+            fromUserId: userId,
+            fromDisplayName: displayName || creator?.displayName || '',
+            fromAvatarUrl: avatarUrl || creator?.avatarUrl || '',
+            postId: post._id,
+          })),
+          { ordered: false }
+        );
+      }
+    }
 
     res.status(201).json({ success: true, post });
   } catch (error) {

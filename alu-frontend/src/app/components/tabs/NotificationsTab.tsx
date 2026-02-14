@@ -14,7 +14,7 @@ interface User {
 }
 
 interface GroupedNotification {
-  type: 'like' | 'comment' | 'follow' | 'comment_like' | 'reply';
+  type: 'like' | 'comment' | 'follow' | 'comment_like' | 'reply' | 'new_post';
   postId?: string;
   commentId?: string;
   parentCommentId?: string;
@@ -25,7 +25,11 @@ interface GroupedNotification {
   read: boolean;
 }
 
-export default function NotificationsTab() {
+interface NotificationsTabProps {
+  onReadAll?: () => void;
+}
+
+export default function NotificationsTab({ onReadAll }: NotificationsTabProps) {
   const { getToken } = useAuth();
   const [notifications, setNotifications] = useState<GroupedNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,6 +72,7 @@ export default function NotificationsTab() {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
+      onReadAll?.();
     } catch (err) {
       console.error('Mark read error:', err);
     }

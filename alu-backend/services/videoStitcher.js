@@ -14,7 +14,7 @@ const { GoogleGenAI } = require('@google/genai');
 const { v2: cloudinary } = require('cloudinary');
 const ffmpegPath = require('ffmpeg-static');
 const { updateJob } = require('./videoJobs');
-const { Post, User } = require('../config/db');
+const { Post, User, Notification } = require('../config/db');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -39,6 +39,12 @@ const MAX_POLL_ATTEMPTS = 60; // 5 min per clip
 // Sora 2 config from env
 const SORA_API_URL = process.env.THIRD_PARTY_API_URL;
 const SORA_API_KEY = process.env.THIRD_PARTY_API_KEY;
+const TEXT_MODEL_FALLBACKS = ['gemini-3-flash-preview', 'gemini-2.5-flash'];
+
+function modelCandidates(primary, fallbacks) {
+    const candidates = [primary, ...fallbacks].filter(Boolean);
+    return [...new Set(candidates)];
+}
 
 /**
  * Split a prompt into multiple scene descriptions using Gemini Flash
@@ -53,12 +59,23 @@ Example format: ["A sunrise over mountains with golden light streaming through c
 Video concept: ${prompt}`;
 
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-3-flash',
-            contents: instruction,
-        });
+        let text = '';
+        let lastErr = null;
+        for (const model of modelCandidates(process.env.GEMINI_TEXT_MODEL, TEXT_MODEL_FALLBACKS)) {
+            try {
+                const response = await ai.models.generateContent({
+                    model,
+                    contents: instruction,
+                });
+                text = response?.text?.trim?.() || '';
+                if (text) break;
+            } catch (err) {
+                lastErr = err;
+                console.warn(`Scene split model ${model} failed:`, err.message);
+            }
+        }
+        if (!text) throw lastErr || new Error('No text model produced scene output.');
 
-        const text = response.text.trim();
         // Extract JSON array from response (handle code blocks)
         const jsonMatch = text.match(/\[[\s\S]*\]/);
         if (!jsonMatch) {
@@ -325,7 +342,7 @@ function cleanup(tmpDir) {
  * Main stitching pipeline — runs in background
  */
 async function processVideoJob(job) {
-    const { jobId, userId, prompt, durationSeconds, visibility, videoType, displayName, avatarUrl } = job;
+    const { jobId, userId, prompt, durationSeconds, visibility, videoType, displayName, avatarUrl, useBonusShort } = job;
     const isShort = videoType === 'short';
     let tmpDir = null;
 
@@ -394,10 +411,31 @@ async function processVideoJob(job) {
             avatarUrl: avatarUrl || '',
         });
 
+        if ((visibility || 'everyone') !== 'private') {
+            const creator = await User.findOne({ userId });
+            const followers = (creator?.followers || []).filter((followerId) => followerId !== userId);
+            if (followers.length > 0) {
+                await Notification.insertMany(
+                    followers.map((followerId) => ({
+                        userId: followerId,
+                        type: 'new_post',
+                        fromUserId: userId,
+                        fromDisplayName: displayName || creator?.displayName || '',
+                        fromAvatarUrl: avatarUrl || creator?.avatarUrl || '',
+                        postId: post._id,
+                    })),
+                    { ordered: false }
+                );
+            }
+        }
+
         // 7. Update user usage
         const user = await User.findOne({ userId });
         if (user) {
             user[isShort ? 'dailyShorts' : 'dailyLongVids'] += 1;
+            if (isShort && useBonusShort) {
+                user.bonusShorts = Math.max(0, (user.bonusShorts || 0) - 1);
+            }
             await user.save();
         }
 

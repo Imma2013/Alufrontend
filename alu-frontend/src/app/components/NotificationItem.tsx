@@ -7,7 +7,7 @@ interface User {
 }
 
 interface NotificationItemProps {
-  type: 'like' | 'comment' | 'follow' | 'comment_like' | 'reply';
+  type: 'like' | 'comment' | 'follow' | 'comment_like' | 'reply' | 'new_post';
   postId?: string;
   commentId?: string;
   users: User[];
@@ -55,6 +55,8 @@ export default function NotificationItem({
           return `${firstUser} liked your comment`;
         case 'reply':
           return `${firstUser} replied: ${commentText}`;
+        case 'new_post':
+          return `${firstUser} posted a new video`;
         default:
           return `${firstUser} interacted with your post`;
       }
@@ -79,6 +81,8 @@ export default function NotificationItem({
         return `${firstUser} and ${others} ${others === 1 ? 'other' : 'others'} liked your comment`;
       case 'follow':
         return `${firstUser} and ${others} ${others === 1 ? 'other' : 'others'} started following you`;
+      case 'new_post':
+        return `${firstUser} and ${others} ${others === 1 ? 'other' : 'others'} posted new videos`;
       default:
         return `${firstUser} and ${others} ${others === 1 ? 'other' : 'others'} interacted with your post`;
     }

@@ -113,6 +113,7 @@ export default function App() {
   const [homePeopleSuggestions, setHomePeopleSuggestions] = useState<SearchUserSuggestion[]>([]);
   const [homeSuggestionOpen, setHomeSuggestionOpen] = useState(false);
   const [homeSuggestionLoading, setHomeSuggestionLoading] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   const homePostsForSuggestions = useLiveQuery(
     () => db.posts.orderBy('timestamp').reverse().limit(300).toArray(),
@@ -177,6 +178,33 @@ export default function App() {
 
     return () => clearTimeout(timeout);
   }, [homeSearchInput, activeTab, searchOpen, homePostsForSuggestions, getToken]);
+
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+        const res = await fetch(`${backendUrl}/notifications/unread-count`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setUnreadNotifications(data.count || 0);
+      } catch {
+      }
+    };
+
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 20000);
+    return () => clearInterval(interval);
+  }, [getToken]);
+
+  useEffect(() => {
+    if (activeTab === 'notifications') {
+      setUnreadNotifications(0);
+    }
+  }, [activeTab]);
 
   const commitHomeKeywordSearch = (keyword: string) => {
     const q = keyword.trim();
@@ -424,6 +452,9 @@ export default function App() {
             className={`relative p-1.5 shrink-0 transition-colors ${activeTab === 'notifications' ? 'text-[var(--alu-primary)]' : 'text-[var(--alu-text-secondary)] hover:text-[var(--alu-text)]'}`}
           >
             <NotificationsIcon size={20} active={activeTab === 'notifications'} />
+            {unreadNotifications > 0 && activeTab !== 'notifications' && (
+              <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-red-500" />
+            )}
           </button>
         </div>
       </header>
@@ -450,7 +481,12 @@ export default function App() {
                     : 'text-[var(--alu-text-secondary)] hover:bg-[var(--alu-hover)] hover:text-[var(--alu-text)]'
                   }`}
               >
-                <span className={isActive ? 'text-[var(--alu-primary)]' : ''}>{item.icon(isActive)}</span>
+                <span className={`relative ${isActive ? 'text-[var(--alu-primary)]' : ''}`}>
+                  {item.icon(isActive)}
+                  {item.key === 'notifications' && unreadNotifications > 0 && activeTab !== 'notifications' && (
+                    <span className="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-red-500" />
+                  )}
+                </span>
                 {item.label}
               </button>
             );
@@ -549,11 +585,11 @@ export default function App() {
         {/* Tab Content */}
         <div className="w-full">
           {activeTab === 'home' && <HomeTab showAI={showAI} showNormal={showNormal} searchQuery={homeSearchQuery} onViewUser={handleViewUser} />}
-          {activeTab === 'shorts' && <ShortsTab searchQuery={shortsSearchQuery} />}
+          {activeTab === 'shorts' && <ShortsTab searchQuery={shortsSearchQuery} onViewUser={handleViewUser} />}
           {activeTab === 'videos' && <VideosTab searchQuery={videosSearchQuery} />}
           {activeTab === 'create' && <CreateTab />}
           {activeTab === 'profile' && <ProfileTab viewUserId={viewUserId} onBack={() => setViewUserId(null)} onViewUser={handleViewUser} />}
-          {activeTab === 'notifications' && <NotificationsTab />}
+          {activeTab === 'notifications' && <NotificationsTab onReadAll={() => setUnreadNotifications(0)} />}
         </div>
       </main>
 
