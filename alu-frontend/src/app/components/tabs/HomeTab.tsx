@@ -9,7 +9,6 @@ import MediaItem from '../MediaItem';
 import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon } from '../icons';
 import PostModal from '../PostModal';
 import ImageCarousel from '../ImageCarousel';
-import CommentsDrawer from '../CommentsDrawer';
 
 interface UserResult {
   userId: string;
@@ -34,8 +33,6 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [openCommentsOnModal, setOpenCommentsOnModal] = useState(false);
-  const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
-  const [isMobile, setIsMobile] = useState(false);
   const [peopleResults, setPeopleResults] = useState<UserResult[]>([]);
   const [isSearchingPeople, setIsSearchingPeople] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -100,13 +97,6 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
     }) || [];
 
   const isSearching = !!searchQuery.trim();
-
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
 
   useEffect(() => {
     if (!allPosts || !user) return;
@@ -260,10 +250,6 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
   };
 
   const openComments = (post: Post) => {
-    if (isMobile) {
-      setCommentsPostId(post._id);
-      return;
-    }
     openPostModal(post, true);
   };
 
@@ -517,12 +503,6 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
           openComments={openCommentsOnModal}
         />
       )}
-      <CommentsDrawer
-        postId={commentsPostId || ''}
-        isOpen={!!commentsPostId}
-        onClose={() => setCommentsPostId(null)}
-        variant="mobile"
-      />
     </div>
   );
 }

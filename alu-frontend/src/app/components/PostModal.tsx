@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { Post, db } from '../db';
 import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon } from './icons';
@@ -46,6 +47,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [mediaLoaded, setMediaLoaded] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
   const commentsSectionRef = useRef<HTMLDivElement>(null);
@@ -54,6 +56,10 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
   const isOwner = post.userId === user?.id;
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Scroll modal content to top on mount and when post changes
   useEffect(() => {
@@ -70,6 +76,14 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
       document.body.style.overflow = previousOverflow;
     };
   }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
 
   useEffect(() => {
     setLoadingComments(true);
@@ -374,30 +388,30 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
           {c.avatarUrl ? (
             <img src={c.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-alu-surface flex items-center justify-center text-xs font-bold text-alu-text-secondary shrink-0">
+            <div className="w-8 h-8 rounded-full bg-[#f2f2f2] flex items-center justify-center text-xs font-bold text-[#8e8e8e] shrink-0">
               {(c.displayName || 'U')[0].toUpperCase()}
             </div>
           )}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-alu-text">{c.displayName || 'User'}</span>
-              <span className="text-xs text-alu-text-tertiary">{timeAgo(c.createdAt)}</span>
+              <span className="text-xs font-semibold text-[#262626]">{c.displayName || 'User'}</span>
+              <span className="text-xs text-[#8e8e8e]">{timeAgo(c.createdAt)}</span>
             </div>
-            <p className="text-sm text-alu-text mt-0.5">{c.text}</p>
+            <p className="text-sm text-[#262626] mt-0.5 leading-[1.35]">{c.text}</p>
             {c.imageUrl && (
               <img src={c.imageUrl} alt="" className="mt-2 max-w-[150px] rounded-lg" />
             )}
             <div className="flex items-center gap-3 mt-1.5">
               <button
                 onClick={() => handleCommentLike(c._id, isReply, parentId)}
-                className="text-xs font-semibold text-alu-text-tertiary hover:text-alu-text transition-colors"
+                className="text-xs font-semibold text-[#8e8e8e] hover:text-[#262626] transition-colors"
               >
                 {c.likes > 0 ? `${c.likes} ${c.likes === 1 ? 'like' : 'likes'}` : 'Like'}
               </button>
               {!isReply && (
                 <button
                   onClick={() => setReplyingTo(c)}
-                  className="text-xs font-semibold text-alu-text-tertiary hover:text-alu-text transition-colors"
+                  className="text-xs font-semibold text-[#8e8e8e] hover:text-[#262626] transition-colors"
                 >
                   Reply
                 </button>
@@ -405,7 +419,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
               {c.userId === user?.id && (
                 <button
                   onClick={() => deleteComment(c._id, isReply, parentId)}
-                  className="text-xs font-semibold text-alu-text-tertiary hover:text-red-500 transition-colors"
+                  className="text-xs font-semibold text-[#8e8e8e] hover:text-red-500 transition-colors"
                 >
                   Delete
                 </button>
@@ -422,9 +436,9 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
         {hasReplies && (
           <button
             onClick={() => toggleReplies(c._id)}
-            className="ml-10 mt-2 flex items-center gap-2 text-xs font-semibold text-alu-text-tertiary hover:text-alu-text transition-colors"
+            className="ml-10 mt-2 flex items-center gap-2 text-xs font-semibold text-[#8e8e8e] hover:text-[#262626] transition-colors"
           >
-            <div className="w-6 h-px bg-alu-border" />
+            <div className="w-6 h-px bg-[#dbdbdb]" />
             {repliesExpanded ? 'Hide' : 'View'} {c.replyCount} {c.replyCount === 1 ? 'reply' : 'replies'}
           </button>
         )}
@@ -438,15 +452,18 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
     );
   };
 
-  return (
-    <div className="fixed inset-0 z-[100] bg-black/65 flex items-stretch md:items-center justify-center p-0 md:p-4 overflow-hidden" onClick={onClose}>
+  if (!mounted) return null;
+
+  const modal = (
+    <div className="contents">
+      <div className="fixed inset-0 z-[100] bg-black/75 flex items-stretch md:items-center justify-center p-0 md:p-4 overflow-hidden" onClick={onClose}>
       <div
-        className="relative bg-white w-full h-[100dvh] md:h-[90vh] md:max-h-[90vh] md:max-w-[1120px] rounded-none md:rounded-2xl overflow-hidden animate-fade-in flex flex-col md:flex-row"
+        className="relative bg-white w-full h-[100dvh] md:h-[88vh] md:max-h-[88vh] md:max-w-[1180px] rounded-none md:rounded-[6px] overflow-hidden animate-fade-in flex flex-col md:flex-row border border-black/10"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors"
+          className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/45 text-white flex items-center justify-center hover:bg-black/65 transition-colors"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <line x1="18" y1="6" x2="6" y2="18" />
@@ -455,7 +472,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
         </button>
 
         <div
-          className={`w-full md:w-[62%] h-[44dvh] md:h-full flex items-center justify-center relative flex-shrink-0 ${post.mediaType === 'image' ? 'bg-alu-surface' : 'bg-black'}`}
+          className={`w-full md:flex-1 h-[46dvh] md:h-full flex items-center justify-center relative flex-shrink-0 ${post.mediaType === 'image' ? 'bg-[#fafafa]' : 'bg-black'}`}
           style={{ minHeight: '240px' }}
         >
           {/* Loading spinner */}
@@ -500,8 +517,8 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
           )}
         </div>
 
-        <div ref={modalContentRef} className="w-full md:w-[38%] flex-1 flex flex-col max-h-[56dvh] md:max-h-full overflow-y-hidden">
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--alu-border)] shrink-0">
+        <div ref={modalContentRef} className="w-full md:w-[404px] md:min-w-[404px] flex-1 flex flex-col max-h-[54dvh] md:max-h-full overflow-y-hidden bg-white">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-[#efefef] shrink-0">
             <button onClick={handleViewUser} className="shrink-0">
               {post.avatarUrl ? (
                 <img src={post.avatarUrl} alt="" className="w-9 h-9 rounded-full object-cover" />
@@ -513,9 +530,9 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
             </button>
             <div className="flex-1 min-w-0">
               <button onClick={handleViewUser} className="hover:underline">
-                <span className="font-semibold text-sm text-alu-text">{post.displayName || 'Alu User'}</span>
+                <span className="font-semibold text-sm text-[#262626]">{post.displayName || 'Alu User'}</span>
               </button>
-              <span className="text-xs text-alu-text-tertiary block">{timeAgo(post.timestamp)}</span>
+              <span className="text-xs text-[#8e8e8e] block">{timeAgo(post.timestamp)}</span>
             </div>
             {isOwner && (
               <button
@@ -541,8 +558,8 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
                   </div>
                 )}
                 <div>
-                  <span className="font-semibold text-xs text-alu-text">{post.displayName || 'User'}</span>
-                  <p className="text-sm text-alu-text mt-0.5">{post.safePrompt}</p>
+                  <span className="font-semibold text-xs text-[#262626]">{post.displayName || 'User'}</span>
+                  <p className="text-sm text-[#262626] mt-0.5">{post.safePrompt}</p>
                 </div>
               </div>
             )}
@@ -552,7 +569,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
                 <div className="w-6 h-6 border-2 border-[var(--alu-primary)] border-t-transparent rounded-full animate-spin" />
               </div>
             ) : comments.length === 0 ? (
-              <p className="text-center text-xs text-alu-text-tertiary py-6">No comments yet. Be the first!</p>
+              <p className="text-center text-xs text-[#8e8e8e] py-6">No comments yet. Be the first!</p>
             ) : (
               <div className="flex flex-col gap-4">
                 {comments.map(c => renderComment(c))}
@@ -561,42 +578,46 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
             <div ref={commentsEndRef} />
           </div>
 
-          <div className="flex items-center justify-between px-4 py-2.5 border-t border-[var(--alu-border)] shrink-0">
+          <div className="flex items-center justify-between px-4 pt-2.5 pb-1.5 border-t border-[#efefef] shrink-0">
             <div className="flex items-center gap-4">
               <button
                 onClick={toggleLike}
-                className={`flex items-center gap-1.5 transition-all ${likedByMe ? 'text-[var(--alu-danger)]' : 'text-alu-text-secondary hover:text-alu-text'}`}
+                className={`transition-colors ${likedByMe ? 'text-[#ed4956]' : 'text-[#262626] hover:text-black/60'}`}
               >
-                <HeartIcon size={22} />
-                <span className="text-xs font-medium">{likeCount}</span>
+                <HeartIcon size={24} />
               </button>
               <button
                 onClick={() => {
                   commentInputRef.current?.focus();
                 }}
-                className="text-alu-text-secondary hover:text-alu-text transition-colors"
+                className="text-[#262626] hover:text-black/60 transition-colors"
               >
-                <CommentIcon size={22} />
+                <CommentIcon size={24} />
               </button>
               <button
                 onClick={handleShare}
-                className="text-alu-text-secondary hover:text-alu-text transition-colors"
+                className="text-[#262626] hover:text-black/60 transition-colors"
               >
-                <ShareIcon size={22} />
+                <ShareIcon size={23} />
               </button>
             </div>
             <button
               onClick={toggleSave}
-              className={`transition-all ${saved ? 'text-[var(--alu-primary)]' : 'text-alu-text-secondary hover:text-alu-text'}`}
+              className={`transition-colors ${saved ? 'text-[#262626]' : 'text-[#262626] hover:text-black/60'}`}
             >
-              <BookmarkIcon size={22} />
+              <BookmarkIcon size={23} />
             </button>
           </div>
 
-          <div className="border-t border-[var(--alu-border)] px-4 py-3 shrink-0">
+          <div className="px-4 pb-2.5">
+            <p className="text-[13px] font-semibold text-[#262626]">{likeCount.toLocaleString()} likes</p>
+            <p className="text-[11px] text-[#8e8e8e] mt-0.5 uppercase tracking-[0.2px]">{new Date(post.timestamp).toLocaleDateString()}</p>
+          </div>
+
+          <div className="border-t border-[#efefef] px-4 py-2.5 shrink-0">
             {replyingTo && (
-              <div className="flex items-center justify-between mb-2 px-3 py-2 bg-alu-surface rounded-lg">
-                <span className="text-xs text-alu-text-secondary">
+              <div className="flex items-center justify-between mb-2 px-3 py-2 bg-[#fafafa] rounded-lg border border-[#efefef]">
+                <span className="text-xs text-[#737373]">
                   Replying to <span className="font-semibold">{replyingTo.displayName}</span>
                 </span>
                 <button
@@ -631,7 +652,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
               </div>
             )}
 
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <input
                 type="file"
                 ref={fileInputRef}
@@ -642,7 +663,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploadingImage}
-                className="h-10 w-10 rounded-full bg-alu-surface flex items-center justify-center text-alu-text-secondary hover:text-alu-text transition-colors disabled:opacity-50 shrink-0"
+                className="h-9 w-9 rounded-full bg-transparent flex items-center justify-center text-[#8e8e8e] hover:text-[#262626] transition-colors disabled:opacity-50 shrink-0"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -657,13 +678,12 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
                 onChange={(e) => setCommentText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submitComment()}
                 placeholder="Add a comment..."
-                className="flex-1 h-10 px-3 bg-alu-surface rounded-full text-sm text-alu-text placeholder:text-alu-text-tertiary outline-none focus:ring-2 focus:ring-[var(--alu-primary-glow)]"
+                className="flex-1 h-9 px-0 bg-transparent text-sm text-[#262626] placeholder:text-[#8e8e8e] outline-none"
               />
               <button
                 onClick={submitComment}
                 disabled={submittingComment || uploadingImage || (!commentText.trim() && !imageFile)}
-                className="h-10 px-4 rounded-full text-sm font-semibold text-white disabled:opacity-50 transition-opacity"
-                style={{ background: 'linear-gradient(135deg, var(--alu-primary), var(--alu-primary-light))' }}
+                className="h-9 px-1 text-sm font-semibold text-[#0095f6] disabled:opacity-40 transition-opacity"
               >
                 {uploadingImage ? '...' : submittingComment ? '...' : 'Post'}
               </button>
@@ -695,6 +715,9 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
           </div>
         </div>
       )}
-    </div>
+      </div>
+      </div>
   );
+
+  return createPortal(modal, document.body);
 }

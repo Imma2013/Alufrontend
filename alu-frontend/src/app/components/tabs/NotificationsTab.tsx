@@ -30,6 +30,7 @@ export default function NotificationsTab() {
   const [notifications, setNotifications] = useState<GroupedNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [openCommentsOnModal, setOpenCommentsOnModal] = useState(false);
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
@@ -103,6 +104,7 @@ export default function NotificationsTab() {
 
         if (post) {
           setSelectedPost(post);
+          setOpenCommentsOnModal(notification.type === 'comment' || notification.type === 'reply' || notification.type === 'comment_like');
         } else {
           alert('This post is no longer available');
         }
@@ -162,8 +164,15 @@ export default function NotificationsTab() {
       {selectedPost && (
         <PostModal
           post={selectedPost}
-          onClose={() => setSelectedPost(null)}
-          onDeleted={() => setSelectedPost(null)}
+          onClose={() => {
+            setSelectedPost(null);
+            setOpenCommentsOnModal(false);
+          }}
+          onDeleted={() => {
+            setSelectedPost(null);
+            setOpenCommentsOnModal(false);
+          }}
+          openComments={openCommentsOnModal}
         />
       )}
     </div>

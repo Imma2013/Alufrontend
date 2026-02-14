@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { HeartIcon } from './icons';
 
@@ -41,10 +42,15 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
     const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
     const [touchStart, setTouchStart] = useState<number | null>(null);
     const [touchEnd, setTouchEnd] = useState<number | null>(null);
+    const [mounted, setMounted] = useState(false);
     const drawerRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     // Detect variant based on screen size if not explicitly set
     const [isMobile, setIsMobile] = useState(false);
@@ -418,11 +424,11 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
         );
     };
 
-    if (!isOpen) return null;
+    if (!mounted || !isOpen) return null;
 
     // Mobile variant: Instagram-like comments sheet
     if (actualVariant === 'mobile') {
-        return (
+        return createPortal(
             <div className="fixed inset-0 z-[120] bg-black/55 backdrop-blur-[2px] animate-fade-in">
                 <div
                     ref={drawerRef}
@@ -526,12 +532,13 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
                         </div>
                     </div>
                 </div>
-            </div>
+            </div>,
+            document.body
         );
     }
 
     // Desktop variant: Right side panel
-    return (
+    return createPortal(
         <div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm animate-fade-in">
             <div
                 ref={drawerRef}
@@ -627,6 +634,7 @@ export default function CommentsDrawer({ postId, isOpen, onClose, variant = 'des
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
