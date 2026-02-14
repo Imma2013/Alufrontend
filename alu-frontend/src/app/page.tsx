@@ -375,7 +375,6 @@ export default function App() {
             <BrandWordmark />
           </div>
           <h1 className="text-2xl font-bold text-alu-text mb-2">Welcome to alu</h1>
-          <p className="text-sm text-alu-text-secondary mb-8">The next generation social network powered by AI</p>
           <SignInButton mode="modal">
             <button
               className="w-full py-3.5 rounded-xl font-bold text-white text-sm transition-all duration-200 hover:opacity-90 active:scale-[0.98]"
