@@ -3,32 +3,22 @@
 import { BACKEND_URL } from '@/app/lib/backend';
 import { getPostShareUrl } from '@/app/lib/publicUrl';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useAuth, useUser } from '@clerk/nextjs';
-import { db, Post, Story } from '../../db';
+import { db, Post } from '../../db';
 import { pullChanges, pushChanges } from '../../syncService';
 import MediaItem from '../MediaItem';
 import MentionText from '../MentionText';
 import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon } from '../icons';
 import PostModal from '../PostModal';
 import ImageCarousel from '../ImageCarousel';
-import StoryComposerModal from '../StoryComposerModal';
-import StoryViewerModal from '../StoryViewerModal';
 
 interface UserResult {
   userId: string;
   displayName: string;
   avatarUrl: string;
   bio: string;
-}
-
-interface StoryGroup {
-  userId: string;
-  displayName: string;
-  avatarUrl?: string;
-  stories: Story[];
-  hasUnseen: boolean;
 }
 
 interface HomeTabProps {
@@ -49,8 +39,6 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [openCommentsOnModal, setOpenCommentsOnModal] = useState(false);
-  const [storyComposerOpen, setStoryComposerOpen] = useState(false);
-  const [storyViewerUserId, setStoryViewerUserId] = useState<string | null>(null);
   const [peopleResults, setPeopleResults] = useState<UserResult[]>([]);
   const [isSearchingPeople, setIsSearchingPeople] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -59,19 +47,6 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
     () => db.posts.orderBy('timestamp').reverse().toArray(),
     []
   );
-  const allStories = useLiveQuery(
-    () => db.stories.orderBy('createdAt').reverse().toArray(),
-    []
-  );
-
-  useEffect(() => {
-    db.stories
-      .where('expiresAt')
-      .belowOrEqual(new Date())
-      .delete()
-      .catch(() => {});
-  }, []);
-
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
@@ -180,23 +155,6 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
     const runSync = async () => {
       setIsSyncing(true);
       await pullChanges();
-      try {
-        const storiesRes = await fetch(`${BACKEND_URL}/stories`);
-        if (storiesRes.ok) {
-          const storiesData = await storiesRes.json();
-          const stories = Array.isArray(storiesData.stories) ? storiesData.stories : [];
-          if (stories.length > 0) {
-            await db.stories.bulkPut(
-              stories.map((s: Story) => ({
-                ...s,
-                createdAt: new Date(s.createdAt),
-                expiresAt: new Date(s.expiresAt),
-              }))
-            );
-          }
-        }
-      } catch {
-      }
       if (isSignedIn) {
         const token = await getToken();
         if (token) await pushChanges(token);
@@ -346,41 +304,6 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
     openPostModal(post, true);
   };
 
-  const activeStories = useMemo(
-    () =>
-      (allStories || [])
-        .filter((story) => new Date(story.expiresAt).getTime() > Date.now())
-        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
-    [allStories]
-  );
-
-  const storyGroups = useMemo<StoryGroup[]>(() => {
-    const grouped = new Map<string, StoryGroup>();
-    for (const story of activeStories) {
-      const existing = grouped.get(story.userId);
-      const viewedByMe = !!user?.id && story.viewedBy?.includes(user.id);
-      if (existing) {
-        existing.stories.push(story);
-        if (!viewedByMe) existing.hasUnseen = true;
-      } else {
-        grouped.set(story.userId, {
-          userId: story.userId,
-          displayName: story.displayName || 'Alu User',
-          avatarUrl: story.avatarUrl || '',
-          stories: [story],
-          hasUnseen: !viewedByMe,
-        });
-      }
-    }
-    return Array.from(grouped.values()).sort((a, b) => {
-      if (a.userId === user?.id) return -1;
-      if (b.userId === user?.id) return 1;
-      return 0;
-    });
-  }, [activeStories, user?.id]);
-
-  const myStory = storyGroups.find((group) => group.userId === user?.id);
-
   return (
     <div className="w-full max-w-full md:max-w-[470px] mx-auto animate-fade-in bg-white">
       {isSyncing && (
@@ -405,82 +328,6 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
           Following
         </button>
       </div>
-
-      {(storyGroups.length > 0 || !!user) && (
-        <div className="border-b border-alu-border px-3 py-3 md:px-2 bg-white">
-          <div className="flex gap-3 overflow-x-auto hide-scrollbar">
-            {user && (
-              <button
-                onClick={() => {
-                  if (myStory) {
-                    setStoryViewerUserId(myStory.userId);
-                  } else {
-                    setStoryComposerOpen(true);
-                  }
-                }}
-                className="shrink-0 flex flex-col items-center gap-1.5 w-[66px]"
-              >
-                <div className="relative">
-                  <div
-                    className={`w-[60px] h-[60px] rounded-full p-[2px] ${
-                      myStory
-                        ? 'bg-gradient-to-br from-[#f9ce34] via-[#ee2a7b] to-[#6228d7]'
-                        : 'bg-alu-border'
-                    }`}
-                  >
-                    <div className="w-full h-full rounded-full bg-white p-[2px]">
-                      {user.imageUrl ? (
-                        <img src={user.imageUrl} alt="" className="w-full h-full rounded-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full rounded-full bg-alu-surface flex items-center justify-center text-sm font-bold text-alu-text-secondary">
-                          {(user.firstName || user.username || 'U')[0].toUpperCase()}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {!myStory && (
-                    <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-[#0095f6] border-2 border-white text-white text-xs leading-[14px] font-bold flex items-center justify-center">
-                      +
-                    </div>
-                  )}
-                </div>
-                <span className="text-[10px] text-alu-text truncate w-full text-center">
-                  {myStory ? 'Your story' : 'Add story'}
-                </span>
-              </button>
-            )}
-
-            {storyGroups
-              .filter((group) => group.userId !== user?.id)
-              .map((storyUser) => (
-              <button
-                key={storyUser.userId}
-                onClick={() => setStoryViewerUserId(storyUser.userId)}
-                className="shrink-0 flex flex-col items-center gap-1.5 w-[66px]"
-              >
-                <div
-                  className={`w-[60px] h-[60px] rounded-full p-[2px] ${
-                    storyUser.hasUnseen
-                      ? 'bg-gradient-to-br from-[#f9ce34] via-[#ee2a7b] to-[#6228d7]'
-                      : 'bg-alu-border'
-                  }`}
-                >
-                  <div className="w-full h-full rounded-full bg-white p-[2px]">
-                    {storyUser.avatarUrl ? (
-                      <img src={storyUser.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full rounded-full bg-alu-surface flex items-center justify-center text-sm font-bold text-alu-text-secondary">
-                        {(storyUser.displayName || 'U')[0].toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <span className="text-[10px] text-alu-text truncate w-full text-center">{storyUser.displayName || 'User'}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {isSearching && (
         <div className="px-4 py-3 border-b border-alu-border bg-white">
@@ -674,31 +521,6 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
           }}
           onViewUser={onViewUser}
           openComments={openCommentsOnModal}
-        />
-      )}
-      {!!user && (
-        <StoryComposerModal
-          isOpen={storyComposerOpen}
-          userId={user.id}
-          displayName={user.fullName || user.firstName || user.username || 'You'}
-          avatarUrl={user.imageUrl || ''}
-          onClose={() => setStoryComposerOpen(false)}
-        />
-      )}
-      {storyViewerUserId && (
-        <StoryViewerModal
-          isOpen={!!storyViewerUserId}
-          groups={storyGroups.map((group) => ({
-            userId: group.userId,
-            displayName: group.displayName,
-            avatarUrl: group.avatarUrl,
-            stories: group.stories,
-          }))}
-          initialUserId={storyViewerUserId}
-          currentUserId={user?.id}
-          currentUserName={user?.fullName || user?.firstName || user?.username || 'User'}
-          currentUserAvatar={user?.imageUrl || ''}
-          onClose={() => setStoryViewerUserId(null)}
         />
       )}
     </div>

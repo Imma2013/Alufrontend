@@ -16,6 +16,7 @@ import {
   CreateIcon,
   SearchIcon,
   AluLogo,
+  AluMark,
 } from './components/icons';
 import HomeTab from './components/tabs/HomeTab';
 import ShortsTab from './components/tabs/ShortsTab';
@@ -496,8 +497,9 @@ export default function App() {
       <header className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-[var(--alu-border)]" style={{ height: 'var(--alu-header-height)' }}>
         <div className="flex items-center h-full px-3 gap-2">
           {/* Logo */}
-          <button onClick={() => handleTabChange('home')} className="shrink-0 mr-1">
-            <AluLogo size={22} />
+          <button onClick={() => handleTabChange('home')} className="shrink-0 mr-1 flex items-center gap-1.5">
+            <AluMark size={20} />
+            <span className="text-[18px] font-black tracking-tight text-[var(--alu-primary-dark)] leading-none">alu</span>
           </button>
 
           {/* Search + AI/Normal toggle — hidden on profile tab (like Instagram) */}
@@ -593,8 +595,9 @@ export default function App() {
       <aside className="hidden md:flex fixed top-0 left-0 bottom-0 z-40 flex-col border-r border-[var(--alu-border)]" style={{ width: 'var(--alu-sidebar-width)' }}>
         {/* Logo */}
         <div className="h-16 flex items-center px-6">
-          <button onClick={() => handleTabChange('home')}>
-            <AluLogo size={28} />
+          <button onClick={() => handleTabChange('home')} className="flex items-center gap-2">
+            <AluMark size={26} />
+            <span className="text-[28px] font-black tracking-tight text-[var(--alu-primary-dark)] leading-none">alu</span>
           </button>
         </div>
 
