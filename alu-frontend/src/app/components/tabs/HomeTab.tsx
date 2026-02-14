@@ -480,13 +480,6 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                   </button>
                   <span className="text-[11px] text-alu-text-tertiary">{timeAgo(post.timestamp)}</span>
                 </div>
-                <button className="text-alu-text-secondary hover:text-alu-text" aria-label="Post options">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                    <circle cx="5" cy="12" r="1.7" />
-                    <circle cx="12" cy="12" r="1.7" />
-                    <circle cx="19" cy="12" r="1.7" />
-                  </svg>
-                </button>
               </div>
 
               <div
@@ -613,6 +606,8 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
           }))}
           initialUserId={storyViewerUserId}
           currentUserId={user?.id}
+          currentUserName={user?.fullName || user?.firstName || user?.username || 'User'}
+          currentUserAvatar={user?.imageUrl || ''}
           onClose={() => setStoryViewerUserId(null)}
         />
       )}

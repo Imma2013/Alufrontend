@@ -27,6 +27,7 @@ export default function StoryComposerModal({ isOpen, userId, displayName, avatar
   const [imageUrl, setImageUrl] = useState<string>('');
   const [text, setText] = useState('');
   const [textColor, setTextColor] = useState(TEXT_COLORS[0]);
+  const [textSize, setTextSize] = useState(42);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -40,6 +41,7 @@ export default function StoryComposerModal({ isOpen, userId, displayName, avatar
       setImageUrl('');
       setText('');
       setTextColor(TEXT_COLORS[0]);
+      setTextSize(42);
       setError(null);
       setIsSaving(false);
     }
@@ -90,6 +92,7 @@ export default function StoryComposerModal({ isOpen, userId, displayName, avatar
         imageUrl,
         text: text.trim(),
         textColor,
+        textSize,
         createdAt: now,
         expiresAt: expires,
         displayName,
@@ -141,8 +144,8 @@ export default function StoryComposerModal({ isOpen, userId, displayName, avatar
               {text.trim() && (
                 <div className="absolute inset-0 flex items-center justify-center px-6 pointer-events-none">
                   <p
-                    className="text-3xl font-bold text-center leading-tight break-words max-w-full"
-                    style={{ color: textColor, textShadow: '0 2px 12px rgba(0,0,0,0.7)' }}
+                    className="font-bold text-center leading-tight break-words max-w-full"
+                    style={{ color: textColor, textShadow: '0 2px 12px rgba(0,0,0,0.7)', fontSize: `${textSize}px` }}
                   >
                     {text}
                   </p>
@@ -157,6 +160,30 @@ export default function StoryComposerModal({ isOpen, userId, displayName, avatar
                 placeholder="Add text"
                 className="w-full h-10 px-4 rounded-full bg-white/10 text-white text-sm placeholder:text-white/60 outline-none"
               />
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => setTextSize((prev) => Math.max(24, prev - 2))}
+                  className="w-8 h-8 rounded-full bg-white/10 text-white text-sm font-semibold"
+                  aria-label="Smaller text"
+                >
+                  A-
+                </button>
+                <input
+                  type="range"
+                  min={24}
+                  max={64}
+                  value={textSize}
+                  onChange={(e) => setTextSize(Number(e.target.value))}
+                  className="flex-1 accent-[#0095f6]"
+                />
+                <button
+                  onClick={() => setTextSize((prev) => Math.min(64, prev + 2))}
+                  className="w-8 h-8 rounded-full bg-white/10 text-white text-sm font-semibold"
+                  aria-label="Larger text"
+                >
+                  A+
+                </button>
+              </div>
               <div className="flex items-center justify-between mt-3">
                 <div className="flex items-center gap-2">
                   {TEXT_COLORS.map((color) => (

@@ -7,7 +7,7 @@ interface User {
 }
 
 interface NotificationItemProps {
-  type: 'like' | 'comment' | 'follow' | 'comment_like' | 'reply' | 'new_post';
+  type: 'like' | 'comment' | 'follow' | 'comment_like' | 'reply' | 'new_post' | 'story_like' | 'story_reply';
   postId?: string;
   commentId?: string;
   users: User[];
@@ -57,6 +57,10 @@ export default function NotificationItem({
           return `${firstUser} replied: ${commentText}`;
         case 'new_post':
           return `${firstUser} posted a new video`;
+        case 'story_like':
+          return `${firstUser} liked your story`;
+        case 'story_reply':
+          return `${firstUser} replied to your story: ${commentText}`;
         default:
           return `${firstUser} interacted with your post`;
       }
@@ -68,6 +72,8 @@ export default function NotificationItem({
           return `${firstUser} and ${secondUser} liked your post`;
         case 'comment_like':
           return `${firstUser} and ${secondUser} liked your comment`;
+        case 'story_like':
+          return `${firstUser} and ${secondUser} liked your story`;
         default:
           return `${firstUser} and ${secondUser} interacted with your post`;
       }
@@ -83,6 +89,10 @@ export default function NotificationItem({
         return `${firstUser} and ${others} ${others === 1 ? 'other' : 'others'} started following you`;
       case 'new_post':
         return `${firstUser} and ${others} ${others === 1 ? 'other' : 'others'} posted new videos`;
+      case 'story_like':
+        return `${firstUser} and ${others} ${others === 1 ? 'other' : 'others'} liked your story`;
+      case 'story_reply':
+        return `${firstUser} and ${others} ${others === 1 ? 'other' : 'others'} replied to your story`;
       default:
         return `${firstUser} and ${others} ${others === 1 ? 'other' : 'others'} interacted with your post`;
     }

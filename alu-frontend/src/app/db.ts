@@ -36,11 +36,26 @@ export interface Story {
   imageUrl: string;
   text?: string;
   textColor?: string;
+  textSize?: number;
   createdAt: Date;
   expiresAt: Date;
   displayName?: string;
   avatarUrl?: string;
   viewedBy?: string[];
+  likedBy?: string[];
+}
+
+export interface StoryNotification {
+  _id: string;
+  userId: string; // recipient
+  actorId: string;
+  actorName: string;
+  actorAvatar?: string;
+  storyId: string;
+  type: 'story_like' | 'story_reply';
+  text?: string;
+  createdAt: Date;
+  read: boolean;
 }
 
 export interface DMThread {
@@ -68,6 +83,7 @@ export class AluDexie extends Dexie {
   posts!: Table<Post>;
   syncState!: Table<SyncState>;
   stories!: Table<Story>;
+  storyNotifications!: Table<StoryNotification>;
   dmThreads!: Table<DMThread>;
   dmMessages!: Table<DMMessage>;
 
@@ -76,10 +92,11 @@ export class AluDexie extends Dexie {
 
     // Only declare the current schema version — no old versions
     // Old databases with ++id primary key will be deleted and recreated (see initDb below)
-    this.version(6).stores({
+    this.version(7).stores({
       posts: '_id, mediaType, timestamp, userId, synced, updatedAt',
       syncState: 'id',
       stories: '_id, userId, createdAt, expiresAt',
+      storyNotifications: '_id, userId, createdAt, read, storyId, type',
       dmThreads: '_id, userId, participantId, lastMessageAt, unreadCount',
       dmMessages: '_id, threadId, senderId, createdAt'
     });

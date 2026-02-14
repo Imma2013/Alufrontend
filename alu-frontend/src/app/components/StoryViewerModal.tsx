@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Story, db } from '../db';
+import { useAuth } from '@clerk/nextjs';
 
 interface StoryGroup {
   userId: string;
@@ -16,15 +17,28 @@ interface StoryViewerModalProps {
   groups: StoryGroup[];
   initialUserId: string;
   currentUserId?: string;
+  currentUserName?: string;
+  currentUserAvatar?: string;
   onClose: () => void;
 }
 
-export default function StoryViewerModal({ isOpen, groups, initialUserId, currentUserId, onClose }: StoryViewerModalProps) {
+export default function StoryViewerModal({
+  isOpen,
+  groups,
+  initialUserId,
+  currentUserId,
+  currentUserName = 'User',
+  currentUserAvatar = '',
+  onClose,
+}: StoryViewerModalProps) {
+  const { getToken } = useAuth();
   const [mounted, setMounted] = useState(false);
   const initialGroupIndex = Math.max(0, groups.findIndex((group) => group.userId === initialUserId));
   const [groupIndex, setGroupIndex] = useState(initialGroupIndex);
   const [storyIndex, setStoryIndex] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [replyText, setReplyText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -39,6 +53,8 @@ export default function StoryViewerModal({ isOpen, groups, initialUserId, curren
 
   const activeGroup = groups[groupIndex];
   const activeStory = activeGroup?.stories[storyIndex];
+  const canReact = !!activeStory && !!currentUserId && activeStory.userId !== currentUserId;
+  const likedByMe = !!activeStory && !!currentUserId && (activeStory.likedBy || []).includes(currentUserId);
 
   const storyTimeAgo = useMemo(() => {
     if (!activeStory) return '';
@@ -112,6 +128,82 @@ export default function StoryViewerModal({ isOpen, groups, initialUserId, curren
     }
   };
 
+  const createStoryNotification = async (payload: { type: 'story_like' | 'story_reply'; text?: string }) => {
+    if (!activeStory || !currentUserId || activeStory.userId === currentUserId) return;
+    await db.storyNotifications.put({
+      _id:
+        payload.type === 'story_like'
+          ? `story_notif_like_${activeStory._id}_${currentUserId}`
+          : `story_notif_reply_${activeStory._id}_${Date.now()}`,
+      userId: activeStory.userId,
+      actorId: currentUserId,
+      actorName: currentUserName || 'User',
+      actorAvatar: currentUserAvatar || '',
+      storyId: activeStory._id,
+      type: payload.type,
+      text: payload.text || '',
+      createdAt: new Date(),
+      read: false,
+    });
+  };
+
+  const toggleLikeStory = async () => {
+    if (!activeStory || !currentUserId || !canReact) return;
+    const likedBy = new Set(activeStory.likedBy || []);
+    const isLiked = likedBy.has(currentUserId);
+    if (isLiked) {
+      likedBy.delete(currentUserId);
+      await db.storyNotifications.delete(`story_notif_like_${activeStory._id}_${currentUserId}`);
+    } else {
+      likedBy.add(currentUserId);
+      await createStoryNotification({ type: 'story_like' });
+    }
+    await db.stories.update(activeStory._id, { likedBy: Array.from(likedBy) });
+  };
+
+  const sendReply = async () => {
+    if (!activeStory || !canReact || !currentUserId) return;
+    const text = replyText.trim();
+    if (!text || sendingReply) return;
+
+    setSendingReply(true);
+    try {
+      await createStoryNotification({ type: 'story_reply', text });
+
+      // Also deliver as DM, similar to Instagram story replies.
+      try {
+        const token = await getToken();
+        if (token) {
+          const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+          const threadRes = await fetch(`${backendUrl}/dm/threads`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ participantId: activeStory.userId }),
+          });
+          if (threadRes.ok) {
+            const threadData = await threadRes.json();
+            await fetch(`${backendUrl}/dm/threads/${threadData.thread._id}/messages`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ text }),
+            });
+          }
+        }
+      } catch {
+      }
+
+      setReplyText('');
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
   if (!mounted || !isOpen || !activeGroup || !activeStory) return null;
 
   return createPortal(
@@ -156,16 +248,65 @@ export default function StoryViewerModal({ isOpen, groups, initialUserId, curren
         {activeStory.text && (
           <div className="absolute inset-0 flex items-center justify-center px-8 pointer-events-none">
             <p
-              className="text-3xl font-bold text-center leading-tight break-words max-w-full"
-              style={{ color: activeStory.textColor || '#ffffff', textShadow: '0 2px 12px rgba(0,0,0,0.7)' }}
+              className="font-bold text-center leading-tight break-words max-w-full"
+              style={{
+                color: activeStory.textColor || '#ffffff',
+                textShadow: '0 2px 12px rgba(0,0,0,0.7)',
+                fontSize: `${activeStory.textSize || 42}px`,
+              }}
             >
               {activeStory.text}
             </p>
           </div>
         )}
 
-        <button onClick={goPrev} className="absolute left-0 top-0 bottom-0 w-1/3" aria-label="Previous story" />
-        <button onClick={goNext} className="absolute right-0 top-0 bottom-0 w-2/3" aria-label="Next story" />
+        {canReact && (
+          <div className="absolute left-3 right-3 bottom-3 z-20 flex items-center gap-2">
+            <div className="flex-1 h-11 rounded-full border border-white/40 bg-black/25 backdrop-blur-sm flex items-center px-4">
+              <input
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value.slice(0, 300))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    sendReply();
+                  }
+                }}
+                placeholder="Reply to story..."
+                className="w-full bg-transparent text-white text-sm placeholder:text-white/70 outline-none"
+              />
+            </div>
+            <button
+              onClick={toggleLikeStory}
+              className={`w-11 h-11 rounded-full border border-white/40 backdrop-blur-sm flex items-center justify-center ${
+                likedByMe ? 'bg-[#ed4956] text-white' : 'bg-black/25 text-white'
+              }`}
+              aria-label="Like story"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill={likedByMe ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                <path d="M12 21s-7.5-4.35-9.5-8.5A5.5 5.5 0 0 1 12 6a5.5 5.5 0 0 1 9.5 6.5C19.5 16.65 12 21 12 21z" />
+              </svg>
+            </button>
+            <button
+              onClick={sendReply}
+              disabled={!replyText.trim() || sendingReply}
+              className="h-11 px-4 rounded-full bg-[#0095f6] text-white text-sm font-semibold disabled:opacity-45"
+            >
+              {sendingReply ? '...' : 'Send'}
+            </button>
+          </div>
+        )}
+
+        <button
+          onClick={goPrev}
+          className={`absolute left-0 top-0 ${canReact ? 'bottom-[72px]' : 'bottom-0'} w-1/3`}
+          aria-label="Previous story"
+        />
+        <button
+          onClick={goNext}
+          className={`absolute right-0 top-0 ${canReact ? 'bottom-[72px]' : 'bottom-0'} w-2/3`}
+          aria-label="Next story"
+        />
       </div>
     </div>,
     document.body

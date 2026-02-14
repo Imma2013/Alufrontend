@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@clerk/nextjs';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { NotificationsIcon } from '../icons';
 import NotificationItem from '../NotificationItem';
-import { Post, db } from '../../db';
+import { Post, StoryNotification, db } from '../../db';
 import PostModal from '../PostModal';
 
 interface User {
@@ -14,7 +15,7 @@ interface User {
 }
 
 interface GroupedNotification {
-  type: 'like' | 'comment' | 'follow' | 'comment_like' | 'reply' | 'new_post';
+  type: 'like' | 'comment' | 'follow' | 'comment_like' | 'reply' | 'new_post' | 'story_like' | 'story_reply';
   postId?: string;
   commentId?: string;
   parentCommentId?: string;
@@ -31,17 +32,25 @@ interface NotificationsTabProps {
 
 export default function NotificationsTab({ onReadAll }: NotificationsTabProps) {
   const { getToken } = useAuth();
+  const { userId } = useAuth();
   const [notifications, setNotifications] = useState<GroupedNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [openCommentsOnModal, setOpenCommentsOnModal] = useState(false);
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+  const localStoryNotifs = useLiveQuery(
+    () =>
+      userId
+        ? db.storyNotifications.where('userId').equals(userId).reverse().sortBy('createdAt')
+        : Promise.resolve([] as StoryNotification[]),
+    [userId]
+  );
 
   useEffect(() => {
     fetchNotifications();
     markAsRead();
-  }, []);
+  }, [userId]);
 
   const fetchNotifications = async () => {
     try {
@@ -72,6 +81,12 @@ export default function NotificationsTab({ onReadAll }: NotificationsTabProps) {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (userId) {
+        const unread = await db.storyNotifications.where('userId').equals(userId).and((n) => !n.read).toArray();
+        if (unread.length > 0) {
+          await db.storyNotifications.bulkPut(unread.map((n) => ({ ...n, read: true })));
+        }
+      }
       onReadAll?.();
     } catch (err) {
       console.error('Mark read error:', err);
@@ -83,6 +98,10 @@ export default function NotificationsTab({ onReadAll }: NotificationsTabProps) {
     if (notification.type === 'follow') {
       // For now, just log it. Could add profile navigation later
       console.log('Follow notification clicked:', notification.users[0]);
+      return;
+    }
+
+    if (notification.type === 'story_like' || notification.type === 'story_reply') {
       return;
     }
 
@@ -133,13 +152,31 @@ export default function NotificationsTab({ onReadAll }: NotificationsTabProps) {
     );
   }
 
+  const mergedNotifications: GroupedNotification[] = [
+    ...notifications,
+    ...((localStoryNotifs || []).map((n) => ({
+      type: n.type,
+      users: [
+        {
+          userId: n.actorId,
+          displayName: n.actorName,
+          avatarUrl: n.actorAvatar || '',
+        },
+      ],
+      count: 1,
+      latestTimestamp: new Date(n.createdAt).toISOString(),
+      commentText: n.text || '',
+      read: !!n.read,
+    })) as GroupedNotification[]),
+  ].sort((a, b) => new Date(b.latestTimestamp).getTime() - new Date(a.latestTimestamp).getTime());
+
   return (
     <div className="w-full max-w-[600px] mx-auto animate-fade-in">
       <div className="px-4 py-4 border-b border-[var(--alu-border)]">
         <h2 className="text-xl font-bold text-alu-text">Notifications</h2>
       </div>
 
-      {notifications.length === 0 ? (
+      {mergedNotifications.length === 0 ? (
         <div className="text-center py-16">
           <div className="w-16 h-16 rounded-full bg-alu-surface flex items-center justify-center mx-auto mb-4 text-alu-text-tertiary">
             <NotificationsIcon size={28} />
@@ -149,7 +186,7 @@ export default function NotificationsTab({ onReadAll }: NotificationsTabProps) {
         </div>
       ) : (
         <div className="divide-y divide-[var(--alu-border)]">
-          {notifications.map((notif, index) => (
+          {mergedNotifications.map((notif, index) => (
             <NotificationItem
               key={`${notif.postId}_${notif.type}_${index}`}
               type={notif.type}
