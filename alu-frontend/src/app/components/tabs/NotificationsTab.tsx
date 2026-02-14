@@ -1,5 +1,7 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
+
 import { useState, useEffect } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -15,7 +17,7 @@ interface User {
 }
 
 interface GroupedNotification {
-  type: 'like' | 'comment' | 'follow' | 'comment_like' | 'reply' | 'new_post' | 'story_like' | 'story_reply';
+  type: 'like' | 'comment' | 'follow' | 'comment_like' | 'reply' | 'new_post' | 'mention' | 'story_like' | 'story_reply';
   postId?: string;
   commentId?: string;
   parentCommentId?: string;
@@ -28,17 +30,19 @@ interface GroupedNotification {
 
 interface NotificationsTabProps {
   onReadAll?: () => void;
+  onViewUser?: (userId: string) => void;
 }
 
-export default function NotificationsTab({ onReadAll }: NotificationsTabProps) {
+export default function NotificationsTab({ onReadAll, onViewUser }: NotificationsTabProps) {
   const { getToken } = useAuth();
   const { userId } = useAuth();
   const [notifications, setNotifications] = useState<GroupedNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [openCommentsOnModal, setOpenCommentsOnModal] = useState(false);
+  const [actionError, setActionError] = useState('');
 
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+  const backendUrl = BACKEND_URL;
   const localStoryNotifs = useLiveQuery(
     () =>
       userId
@@ -94,10 +98,14 @@ export default function NotificationsTab({ onReadAll }: NotificationsTabProps) {
   };
 
   const handleNotificationClick = async (notification: GroupedNotification) => {
-    // Handle follow notifications - could navigate to user profile
+    setActionError('');
+
+    // Handle follow notifications - navigate to profile
     if (notification.type === 'follow') {
-      // For now, just log it. Could add profile navigation later
-      console.log('Follow notification clicked:', notification.users[0]);
+      const targetUserId = notification.users?.[0]?.userId;
+      if (targetUserId && onViewUser) {
+        onViewUser(targetUserId);
+      }
       return;
     }
 
@@ -128,13 +136,13 @@ export default function NotificationsTab({ onReadAll }: NotificationsTabProps) {
 
         if (post) {
           setSelectedPost(post);
-          setOpenCommentsOnModal(notification.type === 'comment' || notification.type === 'reply' || notification.type === 'comment_like');
+          setOpenCommentsOnModal(notification.type === 'comment' || notification.type === 'reply' || notification.type === 'comment_like' || notification.type === 'mention');
         } else {
-          alert('This post is no longer available');
+          setActionError('This post is no longer available.');
         }
       } catch (err) {
         console.error('Error loading post:', err);
-        alert('Failed to load post');
+        setActionError('Failed to load post.');
       }
     }
   };
@@ -174,6 +182,7 @@ export default function NotificationsTab({ onReadAll }: NotificationsTabProps) {
     <div className="w-full max-w-[600px] mx-auto animate-fade-in">
       <div className="px-4 py-4 border-b border-[var(--alu-border)]">
         <h2 className="text-xl font-bold text-alu-text">Notifications</h2>
+        {actionError && <p className="text-xs text-red-500 mt-1">{actionError}</p>}
       </div>
 
       {mergedNotifications.length === 0 ? (
@@ -220,3 +229,4 @@ export default function NotificationsTab({ onReadAll }: NotificationsTabProps) {
     </div>
   );
 }
+

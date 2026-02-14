@@ -1,5 +1,7 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
+
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth, useUser } from '@clerk/nextjs';
@@ -55,7 +57,7 @@ export default function CommentsDrawer({
     const drawerRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+    const backendUrl = BACKEND_URL;
     const canModerate = !!user?.id && !!postOwnerId && user.id === postOwnerId;
 
     useEffect(() => {
@@ -648,3 +650,4 @@ export default function CommentsDrawer({
         document.body
     );
 }
+

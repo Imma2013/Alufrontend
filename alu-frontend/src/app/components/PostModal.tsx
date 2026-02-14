@@ -1,11 +1,15 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
+
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { Post, db } from '../db';
 import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon, MoreVertIcon } from './icons';
 import ImageCarousel from './ImageCarousel';
+import MentionText from './MentionText';
+import { getPostShareUrl } from '@/app/lib/publicUrl';
 
 interface CommentData {
   _id: string;
@@ -55,7 +59,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modalContentRef = useRef<HTMLDivElement>(null);
 
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+  const backendUrl = BACKEND_URL;
   const isOwner = post.userId === user?.id;
 
   useEffect(() => {
@@ -149,7 +153,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
   };
 
   const handleShare = async () => {
-    const shareUrl = `${window.location.origin}/post/${post._id}`;
+    const shareUrl = getPostShareUrl(post._id);
     const shareData = {
       title: 'Check this out on Alu',
       text: post.safePrompt || 'Shared from Alu',
@@ -167,7 +171,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
   };
 
   const copyPostLink = async () => {
-    const url = `${window.location.origin}/post/${post._id}`;
+    const url = getPostShareUrl(post._id);
     try {
       await navigator.clipboard.writeText(url);
     } catch {
@@ -184,6 +188,26 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
     if (post.userId && onViewUser) {
       onViewUser(post.userId);
       onClose();
+    }
+  };
+
+  const resolveMentionAndView = async (handle: string) => {
+    if (!handle || !onViewUser) return;
+    try {
+      const token = await getToken();
+      const res = await fetch(`${backendUrl}/users/search?q=${encodeURIComponent(handle)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const users = Array.isArray(data.users) ? data.users : [];
+      const exact = users.find((u: { displayName?: string }) => (u.displayName || '').toLowerCase() === handle.toLowerCase());
+      const target = exact || users[0];
+      if (target?.userId) {
+        onViewUser(target.userId);
+        onClose();
+      }
+    } catch {
     }
   };
 
@@ -412,7 +436,9 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
               <span className="text-xs font-semibold text-[#262626]">{c.displayName || 'User'}</span>
               <span className="text-xs text-[#8e8e8e]">{timeAgo(c.createdAt)}</span>
             </div>
-            <p className="text-sm text-[#262626] mt-0.5 leading-[1.35]">{c.text}</p>
+            <p className="text-sm text-[#262626] mt-0.5 leading-[1.35]">
+              <MentionText text={c.text} onMentionClick={resolveMentionAndView} />
+            </p>
             {c.imageUrl && (
               <img src={c.imageUrl} alt="" className="mt-2 max-w-[150px] rounded-lg" />
             )}
@@ -572,7 +598,9 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
                 )}
                 <div>
                   <span className="font-semibold text-xs text-[#262626]">{post.displayName || 'User'}</span>
-                  <p className="text-sm text-[#262626] mt-0.5">{post.safePrompt}</p>
+                  <p className="text-sm text-[#262626] mt-0.5">
+                    <MentionText text={post.safePrompt} onMentionClick={resolveMentionAndView} />
+                  </p>
                 </div>
               </div>
             )}
@@ -768,3 +796,4 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
 
   return createPortal(modal, document.body);
 }
+

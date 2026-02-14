@@ -1,5 +1,7 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
+
 import { useState, useEffect } from 'react';
 import { UserButton, useUser, SignInButton, useAuth } from '@clerk/nextjs';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -174,7 +176,7 @@ export default function App() {
 
       try {
         const token = await getToken();
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+        const backendUrl = BACKEND_URL;
         const res = await fetch(
           `${backendUrl}/users/search?q=${encodeURIComponent(q)}`,
           { headers: token ? { Authorization: `Bearer ${token}` } : {} }
@@ -203,7 +205,7 @@ export default function App() {
       try {
         const token = await getToken();
         if (!token) return;
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+        const backendUrl = BACKEND_URL;
         const res = await fetch(`${backendUrl}/notifications/unread-count`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -234,7 +236,7 @@ export default function App() {
             continue;
           }
 
-          const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+          const backendUrl = BACKEND_URL;
           const res = await fetch(`${backendUrl}/dm/stream`, {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -292,7 +294,7 @@ export default function App() {
       try {
         const token = await getToken();
         if (!token) return;
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+        const backendUrl = BACKEND_URL;
         const res = await fetch(`${backendUrl}/dm/threads`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -727,7 +729,7 @@ export default function App() {
               onMessageUser={handleMessageUser}
             />
           )}
-          {activeTab === 'notifications' && <NotificationsTab onReadAll={() => setUnreadNotifications(0)} />}
+          {activeTab === 'notifications' && <NotificationsTab onReadAll={() => setUnreadNotifications(0)} onViewUser={handleViewUser} />}
           {activeTab === 'messages' && (
             <MessagesTab
               launchRequest={dmLaunchRequest}
@@ -774,3 +776,4 @@ export default function App() {
     </div>
   );
 }
+

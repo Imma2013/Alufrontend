@@ -1,5 +1,7 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
+
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -85,7 +87,7 @@ export default function VideosTab({
 
       try {
         const token = await getToken();
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+        const backendUrl = BACKEND_URL;
         const res = await fetch(`${backendUrl}/users/${user.id}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
@@ -116,7 +118,7 @@ export default function VideosTab({
 
     const isFollowing = followingUserIds.includes(creatorUserId);
     const endpoint = isFollowing ? 'unfollow' : 'follow';
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+    const backendUrl = BACKEND_URL;
     setFollowingBusyUserId(creatorUserId);
     try {
       const res = await fetch(`${backendUrl}/users/${creatorUserId}/${endpoint}`, {
@@ -171,7 +173,7 @@ export default function VideosTab({
         const token = await getToken();
         await Promise.all(
           missing.slice(0, 30).map(async (uid) => {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/users/${uid}`, {
+            const res = await fetch(`${BACKEND_URL}/users/${uid}`, {
               headers: token ? { Authorization: `Bearer ${token}` } : {},
             });
             if (!res.ok) return;
@@ -426,3 +428,4 @@ export default function VideosTab({
     </div>
   );
 }
+

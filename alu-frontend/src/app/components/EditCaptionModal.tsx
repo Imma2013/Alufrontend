@@ -1,5 +1,7 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
+
 import { useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { Post, db } from '../db';
@@ -29,7 +31,7 @@ export default function EditCaptionModal({ post, onClose, onSaved }: EditCaption
       const token = await getToken();
       if (!token) throw new Error('Not authenticated');
 
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+      const backendUrl = BACKEND_URL;
       const res = await fetch(`${backendUrl}/posts/${post._id}/caption`, {
         method: 'PUT',
         headers: {
@@ -101,3 +103,4 @@ export default function EditCaptionModal({ post, onClose, onSaved }: EditCaption
     </div>
   );
 }
+

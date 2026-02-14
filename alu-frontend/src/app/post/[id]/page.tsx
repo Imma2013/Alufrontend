@@ -1,5 +1,8 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
+import { getPostShareUrl } from '@/app/lib/publicUrl';
+
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useAuth, useUser } from '@clerk/nextjs';
@@ -45,7 +48,7 @@ export default function PostPage() {
     const [commentText, setCommentText] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+    const backendUrl = BACKEND_URL;
 
     useEffect(() => {
         const fetchPost = async () => {
@@ -116,7 +119,7 @@ export default function PostPage() {
     };
 
     const handleShare = async () => {
-        const url = window.location.href;
+        const url = getPostShareUrl(postId);
         try {
             if (navigator.share) {
                 await navigator.share({ title: 'Check this out on Alu', url });

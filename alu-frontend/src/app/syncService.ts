@@ -1,6 +1,5 @@
+import { BACKEND_URL } from '@/app/lib/backend';
 import { db } from './db';
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
 /**
  * PULL: Get latest changes from server and update Dexie
@@ -80,3 +79,4 @@ export async function pushChanges(token: string) {
         console.error('Sync Push Error:', error);
     }
 }
+

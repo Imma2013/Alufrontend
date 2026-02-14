@@ -1,8 +1,10 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Story, db } from '../db';
+import { useAuth } from '@clerk/nextjs';
 
 interface StoryComposerModalProps {
   isOpen: boolean;
@@ -23,6 +25,7 @@ const readFileAsDataUrl = (file: File): Promise<string> =>
   });
 
 export default function StoryComposerModal({ isOpen, userId, displayName, avatarUrl = '', onClose }: StoryComposerModalProps) {
+  const { getToken } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [imageUrl, setImageUrl] = useState<string>('');
   const [text, setText] = useState('');
@@ -86,7 +89,32 @@ export default function StoryComposerModal({ isOpen, userId, displayName, avatar
         await db.stories.bulkDelete(activeExisting.map((story) => story._id));
       }
 
-      const story: Story = {
+      const token = await getToken();
+      if (!token) throw new Error('You must be signed in to share a story.');
+
+      const res = await fetch(`${BACKEND_URL}/stories`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          imageUrl,
+          text: text.trim(),
+          textColor,
+          textSize,
+          displayName,
+          avatarUrl,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to create story');
+      }
+
+      const data = await res.json();
+      const story: Story = data.story || {
         _id: `story_${userId}_${Date.now()}`,
         userId,
         imageUrl,
@@ -99,8 +127,11 @@ export default function StoryComposerModal({ isOpen, userId, displayName, avatar
         avatarUrl,
         viewedBy: [userId],
       };
-
-      await db.stories.put(story);
+      await db.stories.put({
+        ...story,
+        createdAt: new Date(story.createdAt),
+        expiresAt: new Date(story.expiresAt),
+      });
       onClose();
     } catch {
       setError('Failed to share story. Try again.');

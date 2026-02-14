@@ -1,6 +1,15 @@
 @import "tailwindcss";
 
 :root {
+  /* Instagram baseline palette (applied first for clone-parity visual tuning) */
+  --ig-blue: #0095f6;
+  --ig-black: #262626;
+  --ig-gray: #8e8e8e;
+  --ig-border: #dbdbdb;
+  --ig-surface: #fafafa;
+  --ig-danger: #ed4956;
+
+  /* Alu brand overrides (final active theme) */
   --alu-primary: #D4A017;
   --alu-primary-light: #F5D060;
   --alu-primary-dark: #B8860B;

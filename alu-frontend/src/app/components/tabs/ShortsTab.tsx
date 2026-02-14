@@ -1,5 +1,8 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
+import { getPostShareUrl } from '@/app/lib/publicUrl';
+
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useAuth, useUser } from '@clerk/nextjs';
@@ -34,7 +37,7 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
   const touchStartTime = useRef(0);
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+  const backendUrl = BACKEND_URL;
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -177,7 +180,7 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
     });
 
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+      const backendUrl = BACKEND_URL;
       await fetch(`${backendUrl}/posts/${key}/like`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -202,7 +205,7 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
     });
 
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+      const backendUrl = BACKEND_URL;
       await fetch(`${backendUrl}/posts/${key}/favorite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -214,7 +217,7 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
 
   const handleShare = async () => {
     if (!short) return;
-    const shareUrl = `${window.location.origin}/post/${short._id}`;
+    const shareUrl = getPostShareUrl(short._id);
     const shareData = {
       title: 'Check out this short on Alu',
       text: short.safePrompt || 'Shared from Alu',
@@ -528,3 +531,4 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
     </div>
   );
 }
+

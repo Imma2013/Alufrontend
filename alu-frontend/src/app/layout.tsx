@@ -12,8 +12,24 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://alu-teal-pi.vercel.app'),
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    title: 'alu',
+    description: 'Create. Share. Discover. - The AI-powered social network.',
+    url: '/',
+    siteName: 'alu',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'alu',
+    description: 'Create. Share. Discover. - The AI-powered social network.',
+  },
   title: "alu",
-  description: "Create. Share. Discover. — The AI-powered social network.",
+  description: "Create. Share. Discover. - The AI-powered social network.",
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -54,3 +70,4 @@ export default function RootLayout({
     </ClerkProvider>
   );
 }
+

@@ -1,5 +1,8 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
+import { getWatchShareUrl } from '@/app/lib/publicUrl';
+
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@clerk/nextjs';
@@ -112,7 +115,7 @@ export default function WatchPage() {
   const pendingSeekRef = useRef<number | null>(null);
   const resumeAfterSwitchRef = useRef(false);
 
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+  const backendUrl = BACKEND_URL;
 
   useEffect(() => {
     const fetchData = async () => {
@@ -138,7 +141,7 @@ export default function WatchPage() {
           });
           if (syncRes.ok) {
             const syncData = await syncRes.json();
-            const videos = (syncData.posts || [])
+            const videos = (syncData.changes || [])
               .filter((p: PostData) => p.mediaType === 'video' && p.videoType === 'long' && p._id !== postId)
               .slice(0, 10);
             setRelatedPosts(videos);
@@ -382,7 +385,7 @@ export default function WatchPage() {
   };
 
   const handleShare = async () => {
-    const url = window.location.href;
+    const url = getWatchShareUrl(postId);
     try {
       if (navigator.share) await navigator.share({ title: 'Check this out on Alu', url });
       else {

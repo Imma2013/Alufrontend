@@ -1,5 +1,7 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
+
 import { useState, useEffect, useRef } from 'react';
 import { useAuth, useUser } from '@clerk/nextjs';
 
@@ -38,7 +40,7 @@ export default function CommentsPanel({ postId, isOpen, onClose }: CommentsPanel
     const panelRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+    const backendUrl = BACKEND_URL;
 
     useEffect(() => {
         if (!isOpen || !postId) return;
@@ -425,3 +427,4 @@ export default function CommentsPanel({ postId, isOpen, onClose }: CommentsPanel
         </div>
     );
 }
+

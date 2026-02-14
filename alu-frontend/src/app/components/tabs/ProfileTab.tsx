@@ -1,5 +1,8 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
+import { getAppBaseUrl, getPostShareUrl } from '@/app/lib/publicUrl';
+
 import { useState, useEffect, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useUser, useClerk, useAuth } from '@clerk/nextjs';
@@ -74,7 +77,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
   const [ownFollowersCount, setOwnFollowersCount] = useState(0);
   const [ownFollowingCount, setOwnFollowingCount] = useState(0);
 
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+  const backendUrl = BACKEND_URL;
 
   // Fetch own follower counts
   useEffect(() => {
@@ -306,7 +309,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
   const otherBio = otherUser?.bio || '';
 
   const handleShareProfile = async () => {
-    const profileUrl = `${window.location.origin}/profile/${isOwnProfile ? (user?.id || '') : (viewUserId || '')}`;
+    const profileUrl = `${getAppBaseUrl()}/profile/${isOwnProfile ? (user?.id || '') : (viewUserId || '')}`;
     try {
       await navigator.clipboard.writeText(profileUrl);
       setCopiedLink(true);
@@ -358,7 +361,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
       const token = await getToken();
       if (!token) return;
 
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+      const backendUrl = BACKEND_URL;
       const res = await fetch(`${backendUrl}/posts/${deletingPost._id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
@@ -650,7 +653,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
           onClose={() => setMenuPost(null)}
           onEdit={() => { setEditingPost(menuPost); setMenuPost(null); }}
           onCopyLink={async () => {
-            const url = `${window.location.origin}/post/${menuPost._id}`;
+            const url = getPostShareUrl(menuPost._id);
             try {
               await navigator.clipboard.writeText(url);
               setCopiedLink(true);
@@ -707,4 +710,5 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
     </div>
   );
 }
+
 

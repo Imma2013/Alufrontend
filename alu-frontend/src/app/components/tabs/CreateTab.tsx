@@ -1,5 +1,7 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
+
 import { useState, useRef, useEffect } from 'react';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { ImageIcon, ZapIcon, FilmIcon, SparkleIcon, UploadIcon, GlobeIcon, LockIcon, UsersIcon } from '../icons';
@@ -24,6 +26,7 @@ export default function CreateTab() {
   const [success, setSuccess] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   // Long video progress state
   const [videoJobId, setVideoJobId] = useState<string | null>(null);
@@ -48,13 +51,55 @@ export default function CreateTab() {
     limits: { image: number; short: number };
     isPro: boolean;
   } | null>(null);
+  const backendUrl = BACKEND_URL;
+
+  const getBackendConfigError = () => {
+    if (typeof window === 'undefined') return null;
+    const configuredBackend = process.env.NEXT_PUBLIC_BACKEND_URL;
+    if (!configuredBackend) {
+      return 'Backend not configured. Set NEXT_PUBLIC_BACKEND_URL to your Render API URL.';
+    }
+    try {
+      const backend = new URL(configuredBackend, window.location.origin);
+      const frontend = new URL(window.location.origin);
+      if (backend.host === frontend.host) {
+        return 'NEXT_PUBLIC_BACKEND_URL points to this frontend domain. Set it to your Render backend URL.';
+      }
+    } catch {
+      return 'NEXT_PUBLIC_BACKEND_URL is invalid. Use full URL like https://your-backend.onrender.com';
+    }
+    return null;
+  };
+
+  const parseErrorResponse = async (res: Response, fallback: string) => {
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await res.json().catch(() => ({}));
+      return data?.error || data?.message || `${fallback} (${res.status})`;
+    }
+    const text = await res.text().catch(() => '');
+    const preview = text.replace(/\s+/g, ' ').slice(0, 180);
+    if (preview.startsWith('<!DOCTYPE') || preview.startsWith('<html')) {
+      return `${fallback} (${res.status}). Received HTML instead of API JSON. Check NEXT_PUBLIC_BACKEND_URL.`;
+    }
+    return `${fallback} (${res.status}). Non-JSON response: ${preview || 'empty response'}`;
+  };
+
+  useEffect(() => {
+    setConfigError(getBackendConfigError());
+  }, [backendUrl]);
 
   useEffect(() => {
     const fetchUsage = async () => {
       try {
+        const cfgErr = getBackendConfigError();
+        if (cfgErr) {
+          setConfigError(cfgErr);
+          return;
+        }
         const token = await getToken();
         if (!token) return;
-        const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/usage`, {
+        const res = await fetch(`${backendUrl}/usage`, {
           headers: { 'Authorization': `Bearer ${token}` },
         });
         if (res.ok) {
@@ -65,12 +110,14 @@ export default function CreateTab() {
       }
     };
     fetchUsage();
-  }, [success, getToken]); // re-fetch after successful generation
+  }, [success, getToken, backendUrl]); // re-fetch after successful generation
 
   const handleUpgrade = async (mode: 'subscription' | 'payment' | 'short') => {
     const token = await getToken();
     if (!token) return;
     try {
+      const cfgErr = getBackendConfigError();
+      if (cfgErr) throw new Error(cfgErr);
       setUpgradeError(null);
       const proPriceId = process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID;
       const creditPriceId = process.env.NEXT_PUBLIC_STRIPE_CREDIT_PRICE_ID;
@@ -88,16 +135,16 @@ export default function CreateTab() {
         );
       }
 
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
       const res = await fetch(`${backendUrl}/payments/create-checkout-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ priceId, mode }),
       });
-      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || 'Unable to start checkout session.');
+        const errMsg = await parseErrorResponse(res, 'Unable to start checkout session');
+        throw new Error(errMsg);
       }
+      const data = await res.json().catch(() => ({}));
       if (data.url) {
         window.location.assign(data.url);
       } else {
@@ -213,6 +260,8 @@ export default function CreateTab() {
     setSuccess(false);
 
     try {
+      const cfgErr = getBackendConfigError();
+      if (cfgErr) throw new Error(cfgErr);
       const token = await getToken();
       if (!token) throw new Error('You must be signed in to upload.');
 
@@ -229,7 +278,7 @@ export default function CreateTab() {
       if (selectedType !== 'image') formData.append('quality', videoQuality);
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/upload`,
+        `${backendUrl}/upload`,
         {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}` },
@@ -238,8 +287,8 @@ export default function CreateTab() {
       );
 
       if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || `Upload failed: ${response.status}`);
+        const errMsg = await parseErrorResponse(response, 'Upload failed');
+        throw new Error(errMsg);
       }
 
       const result = await response.json();
@@ -293,10 +342,10 @@ export default function CreateTab() {
     setVideoStep('');
 
     try {
+      const cfgErr = getBackendConfigError();
+      if (cfgErr) throw new Error(cfgErr);
       const token = await getToken();
       if (!token) throw new Error('You must be signed in to generate content.');
-
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
       if (selectedType === 'short') {
         // --- SHORT VIDEO STITCHING: 60s, 9:16 ---
@@ -316,8 +365,8 @@ export default function CreateTab() {
         });
 
         if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData.error || `Error: ${res.status}`);
+          const errMsg = await parseErrorResponse(res, 'Short generation failed');
+          throw new Error(errMsg);
         }
 
         const { jobId } = await res.json();
@@ -392,8 +441,8 @@ export default function CreateTab() {
         });
 
         if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error || `Error: ${response.status}`);
+          const errMsg = await parseErrorResponse(response, 'Image generation failed');
+          throw new Error(errMsg);
         }
 
         const result = await response.json();
@@ -447,6 +496,11 @@ export default function CreateTab() {
           </button>
         </div>
       </div>
+      {configError && (
+        <div className="mb-6 p-3 rounded-lg border border-red-300 bg-red-50 text-red-700 text-xs">
+          {configError}
+        </div>
+      )}
 
       {/* Content Type Selector */}
       <div className="grid grid-cols-3 gap-3 mb-6">
@@ -768,4 +822,5 @@ export default function CreateTab() {
     </div>
   );
 }
+
 

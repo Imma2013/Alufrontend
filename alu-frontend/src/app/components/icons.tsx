@@ -4,27 +4,34 @@ export function AluLogo({ size = 28 }: { size?: number }) {
   const w = size * 2.2;
   return (
     <svg width={w} height={h} viewBox="0 0 88 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="aluWordmark" x1="8" y1="8" x2="68" y2="34" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#D4A017" />
+          <stop offset="1" stopColor="#F5D060" />
+        </linearGradient>
+      </defs>
       {/* "a" letterform */}
       <path
         d="M18.5 30.5C13.5 30.5 9 27 9 22C9 17 13 13.5 18 13.5C20.5 13.5 22.5 14.5 24 16V14H29V30.5H24V28.5C22.5 30 20.5 30.5 18.5 30.5ZM19 26C22 26 24 24 24 22C24 20 22 18 19 18C16 18 14 20 14 22C14 24 16 26 19 26Z"
-        fill="#D4A017"
+        fill="url(#aluWordmark)"
       />
       {/* "l" letterform */}
       <path
         d="M34 8H39V30.5H34V8Z"
-        fill="#D4A017"
+        fill="url(#aluWordmark)"
       />
       {/* "u" letterform */}
       <path
         d="M44 14H49V24C49 26 50.5 27 52.5 27C54.5 27 56 26 56 24V14H61V24C61 28.5 57.5 31 52.5 31C47.5 31 44 28.5 44 24V14Z"
-        fill="#D4A017"
+        fill="url(#aluWordmark)"
       />
       {/* Spark accent — the AI touch */}
       <path
         d="M65 6L67 10L71 8L69 12L73 14L69 16L71 20L67 18L65 22L63 18L59 20L61 16L57 14L61 12L59 8L63 10L65 6Z"
         fill="#F5D060"
-        opacity="0.85"
+        opacity="0.9"
       />
+      <circle cx="66.5" cy="14" r="1.5" fill="#FFFFFF" opacity="0.7" />
     </svg>
   );
 }
@@ -210,3 +217,4 @@ export function MoreVertIcon({ size = 24 }: { size?: number }) {
     </svg>
   );
 }
+

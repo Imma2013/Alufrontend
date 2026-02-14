@@ -1,5 +1,7 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useAuth, useUser } from '@clerk/nextjs';
@@ -49,10 +51,11 @@ export default function MessagesTab({ launchRequest, onLaunchHandled }: Messages
   const [uploadingImage, setUploadingImage] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
   const [realtimeTick, setRealtimeTick] = useState(0);
+  const [actionError, setActionError] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+  const backendUrl = BACKEND_URL;
 
   const threads = useLiveQuery(
     () => (myUserId ? db.dmThreads.where('userId').equals(myUserId).reverse().sortBy('lastMessageAt') : Promise.resolve([] as DMThread[])),
@@ -219,7 +222,7 @@ export default function MessagesTab({ launchRequest, onLaunchHandled }: Messages
       setIsSearching(true);
       try {
         const token = await getToken();
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+        const backendUrl = BACKEND_URL;
         const res = await fetch(`${backendUrl}/users/search?q=${encodeURIComponent(search.trim())}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
@@ -277,6 +280,7 @@ export default function MessagesTab({ launchRequest, onLaunchHandled }: Messages
 
   const startThreadWithUser = useCallback(async (person: UserResult) => {
     if (!myUserId) return;
+    setActionError('');
     const existing = await db.dmThreads
       .where('userId')
       .equals(myUserId)
@@ -318,19 +322,7 @@ export default function MessagesTab({ launchRequest, onLaunchHandled }: Messages
         }
       }
     } catch {
-      const now = new Date();
-      const thread: DMThread = {
-        _id: `thread_${myUserId}_${person.userId}`,
-        userId: myUserId,
-        participantId: person.userId,
-        participantName: person.displayName || 'Alu User',
-        participantAvatar: person.avatarUrl || '',
-        lastMessage: '',
-        lastMessageAt: now,
-        unreadCount: 0,
-      };
-      await db.dmThreads.put(thread);
-      await openThread(thread._id);
+      setActionError('Could not start chat right now. Please try again.');
     }
 
     setSearch('');
@@ -475,6 +467,7 @@ export default function MessagesTab({ launchRequest, onLaunchHandled }: Messages
                 </button>
               )}
             </div>
+            {actionError && <p className="text-xs text-red-500 mb-2">{actionError}</p>}
             <div className="relative">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8e8e8e]">
                 <SearchIcon size={16} />
@@ -686,3 +679,4 @@ export default function MessagesTab({ launchRequest, onLaunchHandled }: Messages
     </div>
   );
 }
+

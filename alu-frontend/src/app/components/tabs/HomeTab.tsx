@@ -1,11 +1,15 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
+import { getPostShareUrl } from '@/app/lib/publicUrl';
+
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { db, Post, Story } from '../../db';
 import { pullChanges, pushChanges } from '../../syncService';
 import MediaItem from '../MediaItem';
+import MentionText from '../MentionText';
 import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon } from '../icons';
 import PostModal from '../PostModal';
 import ImageCarousel from '../ImageCarousel';
@@ -37,6 +41,8 @@ interface HomeTabProps {
 export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUser }: HomeTabProps) {
   const { getToken, isSignedIn } = useAuth();
   const { user } = useUser();
+  const [feedMode, setFeedMode] = useState<'for-you' | 'following'>('for-you');
+  const [followingUserIds, setFollowingUserIds] = useState<Set<string>>(new Set());
   const [likedPosts, setLikedPosts] = useState<Record<string, number>>({});
   const [likedByMe, setLikedByMe] = useState<Set<string>>(new Set());
   const [savedPosts, setSavedPosts] = useState<Set<string>>(new Set());
@@ -79,7 +85,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
       setIsSearchingPeople(true);
       try {
         const token = await getToken();
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+        const backendUrl = BACKEND_URL;
         const res = await fetch(
           `${backendUrl}/users/search?q=${encodeURIComponent(searchQuery.trim())}`,
           { headers: token ? { Authorization: `Bearer ${token}` } : {} }
@@ -102,6 +108,12 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
 
   const posts =
     allPosts?.filter((p: Post) => {
+      if (feedMode === 'following') {
+        const isMine = p.userId === user?.id;
+        const isFollowing = !!p.userId && followingUserIds.has(p.userId);
+        if (!isMine && !isFollowing) return false;
+      }
+
       if (showAI && !showNormal) {
         if (!p.is_ai) return false;
       } else if (!showAI && showNormal) {
@@ -142,9 +154,49 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
   }, [allPosts, user]);
 
   useEffect(() => {
+    const refreshFollowing = async () => {
+      if (!user?.id) {
+        setFollowingUserIds(new Set());
+        return;
+      }
+      try {
+        const res = await fetch(`${BACKEND_URL}/users/${user.id}`);
+        if (!res.ok) {
+          setFollowingUserIds(new Set());
+          return;
+        }
+        const data = await res.json();
+        const list = Array.isArray(data.following) ? data.following : [];
+        setFollowingUserIds(new Set(list));
+      } catch {
+        setFollowingUserIds(new Set());
+      }
+    };
+
+    refreshFollowing();
+  }, [user?.id]);
+
+  useEffect(() => {
     const runSync = async () => {
       setIsSyncing(true);
       await pullChanges();
+      try {
+        const storiesRes = await fetch(`${BACKEND_URL}/stories`);
+        if (storiesRes.ok) {
+          const storiesData = await storiesRes.json();
+          const stories = Array.isArray(storiesData.stories) ? storiesData.stories : [];
+          if (stories.length > 0) {
+            await db.stories.bulkPut(
+              stories.map((s: Story) => ({
+                ...s,
+                createdAt: new Date(s.createdAt),
+                expiresAt: new Date(s.expiresAt),
+              }))
+            );
+          }
+        }
+      } catch {
+      }
       if (isSignedIn) {
         const token = await getToken();
         if (token) await pushChanges(token);
@@ -157,12 +209,29 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
     return () => clearInterval(interval);
   }, [isSignedIn, getToken]);
 
+  const resolveMentionAndView = async (handle: string) => {
+    if (!handle || !onViewUser) return;
+    try {
+      const token = await getToken();
+      const res = await fetch(`${BACKEND_URL}/users/search?q=${encodeURIComponent(handle)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const users = Array.isArray(data.users) ? data.users : [];
+      const exact = users.find((u) => (u.displayName || '').toLowerCase() === handle.toLowerCase());
+      const target = exact || users[0];
+      if (target?.userId) onViewUser(target.userId);
+    } catch {
+    }
+  };
+
   const getPostKey = (post: Post) => post._id;
 
   const toggleLike = async (postId: string) => {
     const token = await getToken();
     if (!token) return;
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+    const backendUrl = BACKEND_URL;
     try {
       const res = await fetch(`${backendUrl}/posts/${postId}/like`, {
         method: 'POST',
@@ -192,7 +261,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
       const token = await getToken();
       if (!token || !user) return;
 
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+      const backendUrl = BACKEND_URL;
       const res = await fetch(`${backendUrl}/posts/${postId}/favorite`, {
         method: 'POST',
         headers: {
@@ -226,7 +295,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
   };
 
   const handleShare = async (post: Post) => {
-    const shareUrl = `${window.location.origin}/post/${post._id}`;
+    const shareUrl = getPostShareUrl(post._id);
     const shareData = {
       title: 'Check this out on Alu',
       text: post.safePrompt || 'Shared from Alu',
@@ -319,6 +388,23 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
           <span className="text-[11px] text-alu-text-tertiary animate-pulse">Syncing...</span>
         </div>
       )}
+
+      <div className="px-3 py-2 border-b border-alu-border bg-white flex items-center gap-4">
+        <button
+          type="button"
+          onClick={() => setFeedMode('for-you')}
+          className={`text-sm font-semibold transition-colors ${feedMode === 'for-you' ? 'text-alu-text' : 'text-alu-text-tertiary hover:text-alu-text-secondary'}`}
+        >
+          For You
+        </button>
+        <button
+          type="button"
+          onClick={() => setFeedMode('following')}
+          className={`text-sm font-semibold transition-colors ${feedMode === 'following' ? 'text-alu-text' : 'text-alu-text-tertiary hover:text-alu-text-secondary'}`}
+        >
+          Following
+        </button>
+      </div>
 
       {(storyGroups.length > 0 || !!user) && (
         <div className="border-b border-alu-border px-3 py-3 md:px-2 bg-white">
@@ -451,8 +537,12 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                 <path d="m21 15-5-5L5 21" />
               </svg>
             </div>
-            <p className="text-sm font-semibold text-alu-text mb-1">No posts yet</p>
-            <p className="text-xs text-alu-text-tertiary">Be the first to create something</p>
+            <p className="text-sm font-semibold text-alu-text mb-1">
+              {feedMode === 'following' ? 'No posts from people you follow yet' : 'No posts yet'}
+            </p>
+            <p className="text-xs text-alu-text-tertiary">
+              {feedMode === 'following' ? 'Follow creators to build your feed' : 'Be the first to create something'}
+            </p>
           </div>
         )}
 
@@ -566,7 +656,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                     >
                       {post.displayName || 'Alu User'}
                     </button>
-                    {post.safePrompt}
+                    <MentionText text={post.safePrompt} onMentionClick={resolveMentionAndView} />
                   </p>
                 )}
               </div>
@@ -614,3 +704,4 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
     </div>
   );
 }
+

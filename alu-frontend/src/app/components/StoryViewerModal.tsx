@@ -1,5 +1,7 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
+
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Story, db } from '../db';
@@ -87,6 +89,17 @@ export default function StoryViewerModal({
     db.stories.update(activeStory._id, {
       viewedBy: [...(activeStory.viewedBy || []), currentUserId],
     }).catch(() => {});
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        await fetch(`${BACKEND_URL}/stories/${activeStory._id}/view`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch {
+      }
+    })();
   }, [isOpen, activeStory, currentUserId]);
 
   useEffect(() => {
@@ -149,16 +162,24 @@ export default function StoryViewerModal({
 
   const toggleLikeStory = async () => {
     if (!activeStory || !currentUserId || !canReact) return;
-    const likedBy = new Set(activeStory.likedBy || []);
-    const isLiked = likedBy.has(currentUserId);
-    if (isLiked) {
-      likedBy.delete(currentUserId);
-      await db.storyNotifications.delete(`story_notif_like_${activeStory._id}_${currentUserId}`);
-    } else {
-      likedBy.add(currentUserId);
-      await createStoryNotification({ type: 'story_like' });
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`${BACKEND_URL}/stories/${activeStory._id}/like`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const likedBy = Array.isArray(data.likedBy) ? data.likedBy : [];
+      await db.stories.update(activeStory._id, { likedBy });
+      if (data.liked) {
+        await createStoryNotification({ type: 'story_like' });
+      } else {
+        await db.storyNotifications.delete(`story_notif_like_${activeStory._id}_${currentUserId}`);
+      }
+    } catch {
     }
-    await db.stories.update(activeStory._id, { likedBy: Array.from(likedBy) });
   };
 
   const sendReply = async () => {
@@ -174,26 +195,15 @@ export default function StoryViewerModal({
       try {
         const token = await getToken();
         if (token) {
-          const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
-          const threadRes = await fetch(`${backendUrl}/dm/threads`, {
+          const storyReplyRes = await fetch(`${BACKEND_URL}/stories/${activeStory._id}/reply`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify({ participantId: activeStory.userId }),
+            body: JSON.stringify({ text }),
           });
-          if (threadRes.ok) {
-            const threadData = await threadRes.json();
-            await fetch(`${backendUrl}/dm/threads/${threadData.thread._id}/messages`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({ text }),
-            });
-          }
+          if (!storyReplyRes.ok) throw new Error('Story reply failed');
         }
       } catch {
       }
@@ -312,3 +322,4 @@ export default function StoryViewerModal({
     document.body
   );
 }
+
