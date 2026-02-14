@@ -36,6 +36,26 @@ interface SearchUserSuggestion {
   avatarUrl: string;
 }
 
+function isNameLikeQuery(query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return false;
+  if (q.length > 32) return false;
+  if (!/^[a-z\s]+$/.test(q)) return false;
+  const parts = q.split(/\s+/).filter(Boolean);
+  return parts.length >= 1 && parts.length <= 3;
+}
+
+function scoreUserSuggestion(query: string, user: SearchUserSuggestion): number {
+  const q = query.trim().toLowerCase();
+  const name = (user.displayName || '').toLowerCase();
+  if (!name) return 0;
+  if (name === q) return 100;
+  if (name.startsWith(q)) return 80;
+  if (name.includes(` ${q}`)) return 60;
+  if (name.includes(q)) return 40;
+  return 10;
+}
+
 function buildKeywordSuggestions(query: string, posts: Post[]): string[] {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) return [];
@@ -141,7 +161,9 @@ export default function App() {
         );
         if (res.ok) {
           const data = await res.json();
-          const users = ((data.users || []) as SearchUserSuggestion[]).slice(0, 5);
+          const users = ((data.users || []) as SearchUserSuggestion[])
+            .sort((a, b) => scoreUserSuggestion(q, b) - scoreUserSuggestion(q, a))
+            .slice(0, 5);
           setHomePeopleSuggestions(users);
         } else {
           setHomePeopleSuggestions([]);
@@ -181,6 +203,7 @@ export default function App() {
     homeSuggestionOpen &&
     !!homeSearchInput.trim() &&
     (homeSuggestionLoading || homeKeywordSuggestions.length > 0 || homePeopleSuggestions.length > 0);
+  const preferProfileResults = isNameLikeQuery(homeSearchInput);
 
   // Sign-in screen for logged-out users
   if (isLoaded && !isSignedIn) {
@@ -257,6 +280,30 @@ export default function App() {
       {homeSuggestionLoading && (
         <div className="px-3 py-2 text-xs text-alu-text-tertiary">Searching...</div>
       )}
+      {preferProfileResults && homePeopleSuggestions.length > 0 && (
+        <div className="pb-1">
+          {homePeopleSuggestions.map((person) => (
+            <button
+              key={person.userId}
+              onMouseDown={() => {
+                setHomeSuggestionOpen(false);
+                setSearchOpen(false);
+                handleViewUser(person.userId);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-alu-hover transition-colors"
+            >
+              {person.avatarUrl ? (
+                <img src={person.avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover" />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-alu-surface flex items-center justify-center text-[10px] font-bold text-alu-text-secondary">
+                  {(person.displayName || 'U')[0].toUpperCase()}
+                </div>
+              )}
+              <span className="text-sm text-alu-text">{person.displayName || 'User'}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {homeKeywordSuggestions.map((keyword) => (
         <button
           key={`kw-${keyword}`}
@@ -267,7 +314,7 @@ export default function App() {
           <span className="text-sm text-alu-text">{keyword}</span>
         </button>
       ))}
-      {homePeopleSuggestions.length > 0 && (
+      {!preferProfileResults && homePeopleSuggestions.length > 0 && (
         <div className="border-t border-alu-border mt-1 pt-1">
           {homePeopleSuggestions.map((person) => (
             <button

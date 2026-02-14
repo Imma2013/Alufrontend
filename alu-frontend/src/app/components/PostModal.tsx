@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { Post, db } from '../db';
-import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon } from './icons';
+import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon, MoreVertIcon } from './icons';
 import ImageCarousel from './ImageCarousel';
 
 interface CommentData {
@@ -45,6 +45,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
   const [uploadingImage, setUploadingImage] = useState(false);
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showOwnerOptions, setShowOwnerOptions] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [mediaLoaded, setMediaLoaded] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -162,6 +163,20 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
       }
     } catch {
       try { await navigator.clipboard.writeText(shareUrl); } catch { /* silent */ }
+    }
+  };
+
+  const copyPostLink = async () => {
+    const url = `${window.location.origin}/post/${post._id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = url;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
     }
   };
 
@@ -536,13 +551,11 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
             </div>
             {isOwner && (
               <button
-                onClick={() => setShowDeleteConfirm(true)}
-                className="text-alu-text-tertiary hover:text-red-500 transition-colors p-1"
-                title="Delete post"
+                onClick={() => setShowOwnerOptions(true)}
+                className="text-alu-text-tertiary hover:text-[#262626] transition-colors p-1"
+                title="Post options"
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
+                <MoreVertIcon size={20} />
               </button>
             )}
           </div>
@@ -712,6 +725,40 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
                 {deleting ? 'Deleting...' : 'Delete'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showOwnerOptions && (
+        <div className="fixed inset-0 z-[210] bg-black/60 flex items-end md:items-center md:justify-center" onClick={() => setShowOwnerOptions(false)}>
+          <div className="bg-white w-full md:w-[360px] rounded-t-2xl md:rounded-2xl p-3 animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-center pb-2 md:hidden">
+              <div className="w-10 h-1 bg-[#e5e5e5] rounded-full" />
+            </div>
+            <button
+              onClick={async () => {
+                await copyPostLink();
+                setShowOwnerOptions(false);
+              }}
+              className="w-full px-4 py-3 text-sm font-medium text-[#262626] hover:bg-[#fafafa] rounded-xl text-left"
+            >
+              Copy link
+            </button>
+            <button
+              onClick={() => {
+                setShowOwnerOptions(false);
+                setShowDeleteConfirm(true);
+              }}
+              className="w-full px-4 py-3 text-sm font-semibold text-[#ed4956] hover:bg-[#fff5f5] rounded-xl text-left"
+            >
+              Delete
+            </button>
+            <button
+              onClick={() => setShowOwnerOptions(false)}
+              className="w-full px-4 py-3 mt-1 text-sm font-medium text-[#262626] hover:bg-[#fafafa] rounded-xl text-left"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
