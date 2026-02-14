@@ -2,6 +2,27 @@ const express = require('express');
 const router = express.Router();
 const { Post, Comment, Notification } = require('../config/db');
 const clerkAuth = require('../middleware/clerkAuth');
+// GET all liked posts for current user
+router.get('/liked', clerkAuth, async (req, res) => {
+    try {
+        const userId = req.auth.sub;
+        const posts = await Post.find({ likedBy: userId })
+            .sort({ timestamp: -1 })
+            .limit(200);
+
+        const postsWithCounts = await Promise.all(
+            posts.map(async (post) => {
+                const commentCount = await Comment.countDocuments({ postId: post._id });
+                return { ...post.toObject(), commentsCount: commentCount };
+            })
+        );
+
+        res.json({ posts: postsWithCounts });
+    } catch (err) {
+        console.error('Get liked posts error:', err);
+        res.status(500).json({ error: 'Failed to fetch liked posts' });
+    }
+});
 
 // ─── GET single post by ID (public — for share links) ───
 router.get('/:id', async (req, res) => {
@@ -337,3 +358,4 @@ router.get('/favorites', clerkAuth, async (req, res) => {
 });
 
 module.exports = router;
+

@@ -63,7 +63,9 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
 
   // Favorites state
   const [favoritePosts, setFavoritePosts] = useState<Post[]>([]);
+  const [likedPostsList, setLikedPostsList] = useState<Post[]>([]);
   const [loadingFavorites, setLoadingFavorites] = useState(false);
+  const [loadingLikes, setLoadingLikes] = useState(false);
 
   // Follow state
   const [isFollowing, setIsFollowing] = useState(false);
@@ -166,6 +168,37 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
     fetchFavorites();
   }, [activeContentTab, isOwnProfile, backendUrl, getToken]);
 
+  // Fetch likes when likes tab is active
+  useEffect(() => {
+    if (activeContentTab !== 'likes' || !isOwnProfile) {
+      setLikedPostsList([]);
+      return;
+    }
+
+    const fetchLikes = async () => {
+      setLoadingLikes(true);
+      try {
+        const token = await getToken();
+        if (!token) return;
+
+        const res = await fetch(`${backendUrl}/posts/liked`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setLikedPostsList(data.posts || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch liked posts:', err);
+      } finally {
+        setLoadingLikes(false);
+      }
+    };
+
+    fetchLikes();
+  }, [activeContentTab, isOwnProfile, backendUrl, getToken]);
+
   const toggleProfileAI = () => {
     if (profileShowAI && !profileShowNormal) return;
     setProfileShowAI(!profileShowAI);
@@ -211,13 +244,19 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
         { key: 'videos', label: 'Videos', icon: <VideosIcon size={20} /> },
       ];
 
-  // Use favoritePosts when on favorites tab, otherwise use userPosts
-  const sourcePostsForTab = activeContentTab === 'favorites' ? favoritePosts : userPosts;
+  // Likes/Favorites use dedicated server lists, others use profile posts
+  const sourcePostsForTab =
+    activeContentTab === 'likes'
+      ? likedPostsList
+      : activeContentTab === 'favorites'
+        ? favoritePosts
+        : userPosts;
 
   const tabFiltered = sourcePostsForTab.filter((p: Post) => {
     if (activeContentTab === 'posts') return p.mediaType === 'image';
     if (activeContentTab === 'shorts') return p.mediaType === 'video' && (!p.videoType || p.videoType === 'short');
     if (activeContentTab === 'videos') return p.mediaType === 'video' && p.videoType === 'long';
+    if (activeContentTab === 'likes') return true;
     if (activeContentTab === 'favorites') return true; // Show all favorited content
     return true;
   });
@@ -530,19 +569,28 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
       </div>
 
       {/* Content Grid */}
-      <div className="grid grid-cols-3 gap-px bg-alu-border">
+      <div className="grid grid-cols-3 gap-[2px] bg-white">
         {currentContent.length > 0 ? (
           currentContent.map((post) => (
             <div
               key={post._id}
-              className="aspect-square relative overflow-hidden bg-white group"
+              className="aspect-square relative overflow-hidden bg-[#f3f3f3] group"
             >
-              <div className="cursor-pointer" onClick={() => setSelectedPost(post)}>
-                <MediaItem post={post} />
+              <div className="cursor-pointer w-full h-full" onClick={() => setSelectedPost(post)}>
+                <MediaItem post={post} videoControls={false} autoPlayVideo={false} videoObjectFit="cover" />
               </div>
               {post.is_ai && (
                 <div className="absolute top-1.5 left-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/40 text-white backdrop-blur-sm z-10">
                   AI
+                </div>
+              )}
+              {post.mediaType === 'video' && (
+                <div className="absolute top-1.5 right-1.5 z-10 text-white/95">
+                  {post.videoType === 'long' ? (
+                    <VideosIcon size={14} />
+                  ) : (
+                    <ShortsIcon size={14} />
+                  )}
                 </div>
               )}
               {isOwnProfile && (
@@ -561,7 +609,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
         ) : (
           <div className="col-span-3 py-16 text-center">
             <p className="text-sm text-alu-text-tertiary">
-              {loadingProfile ? 'Loading...' : 'Nothing here yet'}
+              {loadingProfile || loadingFavorites || loadingLikes ? 'Loading...' : 'Nothing here yet'}
             </p>
           </div>
         )}
