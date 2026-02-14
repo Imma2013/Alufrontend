@@ -117,6 +117,7 @@ export default function App() {
   const [homeSuggestionLoading, setHomeSuggestionLoading] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [dmRealtimeTick, setDmRealtimeTick] = useState(0);
 
   const homePostsForSuggestions = useLiveQuery(
     () => db.posts.orderBy('timestamp').reverse().limit(300).toArray(),
@@ -204,6 +205,74 @@ export default function App() {
   }, [getToken]);
 
   useEffect(() => {
+    let stopped = false;
+    const controller = new AbortController();
+
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    const connectStream = async () => {
+      while (!stopped && isSignedIn) {
+        try {
+          const token = await getToken();
+          if (!token) {
+            await sleep(1500);
+            continue;
+          }
+
+          const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+          const res = await fetch(`${backendUrl}/dm/stream`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'text/event-stream',
+            },
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+
+          if (!res.ok || !res.body) throw new Error('DM stream unavailable');
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (!stopped) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            let splitIndex = buffer.indexOf('\n\n');
+            while (splitIndex !== -1) {
+              const chunk = buffer.slice(0, splitIndex).trim();
+              buffer = buffer.slice(splitIndex + 2);
+              const dataLine = chunk.split('\n').find((line) => line.startsWith('data: '));
+              if (dataLine) {
+                try {
+                  const event = JSON.parse(dataLine.slice(6));
+                  if (event?.type && event.type !== 'connected') {
+                    setDmRealtimeTick((t) => t + 1);
+                  }
+                } catch {
+                }
+              }
+              splitIndex = buffer.indexOf('\n\n');
+            }
+          }
+        } catch {
+        }
+
+        if (!stopped) await sleep(1500);
+      }
+    };
+
+    if (isSignedIn) connectStream();
+
+    return () => {
+      stopped = true;
+      controller.abort();
+    };
+  }, [getToken, isSignedIn]);
+
+  useEffect(() => {
     const fetchUnreadMessages = async () => {
       try {
         const token = await getToken();
@@ -226,7 +295,7 @@ export default function App() {
     fetchUnreadMessages();
     const interval = setInterval(fetchUnreadMessages, 8000);
     return () => clearInterval(interval);
-  }, [getToken]);
+  }, [getToken, dmRealtimeTick]);
 
   useEffect(() => {
     if (activeTab === 'notifications') {

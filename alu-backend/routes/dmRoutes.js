@@ -3,8 +3,24 @@ const clerkAuth = require('../middleware/clerkAuth');
 const { DMThread, DMMessage, User } = require('../config/db');
 
 const router = express.Router();
+const dmSubscribers = new Map(); // userId -> Set<response>
 
 const normalizeParticipant = (a, b) => [a, b].sort();
+
+const sendSse = (res, payload) => {
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+};
+
+const emitDmEvent = (userIds, payload) => {
+  const uniqueUsers = [...new Set((userIds || []).filter(Boolean))];
+  for (const userId of uniqueUsers) {
+    const subscribers = dmSubscribers.get(userId);
+    if (!subscribers || subscribers.size === 0) continue;
+    for (const res of subscribers) {
+      sendSse(res, payload);
+    }
+  }
+};
 
 const toThreadResponse = async (thread, currentUserId) => {
   const participantId = thread.participants.find((id) => id !== currentUserId) || currentUserId;
@@ -23,6 +39,31 @@ const toThreadResponse = async (thread, currentUserId) => {
     unreadCount: Number(thread.unreadCounts?.get(currentUserId) || 0),
   };
 };
+
+// Realtime DM stream (SSE) for current user
+router.get('/stream', clerkAuth, async (req, res) => {
+  const userId = req.auth.sub;
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
+  if (!dmSubscribers.has(userId)) dmSubscribers.set(userId, new Set());
+  dmSubscribers.get(userId).add(res);
+
+  sendSse(res, { type: 'connected', ts: Date.now() });
+  const heartbeat = setInterval(() => {
+    res.write(':keepalive\n\n');
+  }, 25000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    const subscribers = dmSubscribers.get(userId);
+    if (!subscribers) return;
+    subscribers.delete(res);
+    if (subscribers.size === 0) dmSubscribers.delete(userId);
+  });
+});
 
 // List current user's DM threads
 router.get('/threads', clerkAuth, async (req, res) => {
@@ -65,6 +106,7 @@ router.post('/threads', clerkAuth, async (req, res) => {
     }
 
     const payload = await toThreadResponse(thread, userId);
+    emitDmEvent(participants, { type: 'thread_upsert', threadId: thread._id.toString(), ts: Date.now() });
     res.status(201).json({ thread: payload });
   } catch (error) {
     console.error('DM thread create error:', error);
@@ -129,6 +171,12 @@ router.post('/threads/:threadId/messages', clerkAuth, async (req, res) => {
     thread.unreadCounts.set(senderId, 0);
     if (recipientId) thread.unreadCounts.set(recipientId, unreadForRecipient);
     await thread.save();
+    emitDmEvent(thread.participants, {
+      type: 'message',
+      threadId: thread._id.toString(),
+      senderId,
+      ts: Date.now(),
+    });
 
     res.status(201).json({
       message: {
@@ -164,6 +212,12 @@ router.post('/threads/:threadId/read', clerkAuth, async (req, res) => {
       { threadId, senderId: { $ne: userId }, status: { $ne: 'seen' } },
       { $set: { status: 'seen' } }
     );
+    emitDmEvent(thread.participants, {
+      type: 'read',
+      threadId: thread._id.toString(),
+      seenBy: userId,
+      ts: Date.now(),
+    });
 
     res.json({ success: true });
   } catch (error) {

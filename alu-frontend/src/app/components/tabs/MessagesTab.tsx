@@ -43,18 +43,19 @@ export default function MessagesTab() {
   const [selectedImagePreview, setSelectedImagePreview] = useState<string>('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
+  const [realtimeTick, setRealtimeTick] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
   const threads = useLiveQuery(
-    () => (myUserId ? db.dmThreads.where('userId').equals(myUserId).reverse().sortBy('lastMessageAt') : Promise.resolve([])),
+    () => (myUserId ? db.dmThreads.where('userId').equals(myUserId).reverse().sortBy('lastMessageAt') : Promise.resolve([] as DMThread[])),
     [myUserId]
   );
 
   const messages = useLiveQuery(
-    () => (activeThreadId ? db.dmMessages.where('threadId').equals(activeThreadId).sortBy('createdAt') : Promise.resolve([])),
+    () => (activeThreadId ? db.dmMessages.where('threadId').equals(activeThreadId).sortBy('createdAt') : Promise.resolve([] as DMMessage[])),
     [activeThreadId]
   );
 
@@ -64,6 +65,74 @@ export default function MessagesTab() {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  useEffect(() => {
+    let stopped = false;
+    const controller = new AbortController();
+
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    const connectStream = async () => {
+      while (!stopped && myUserId) {
+        try {
+          const token = await getToken();
+          if (!token) {
+            await sleep(1500);
+            continue;
+          }
+
+          const res = await fetch(`${backendUrl}/dm/stream`, {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'text/event-stream',
+            },
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+
+          if (!res.ok || !res.body) throw new Error('DM stream unavailable');
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (!stopped) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            let splitIndex = buffer.indexOf('\n\n');
+            while (splitIndex !== -1) {
+              const chunk = buffer.slice(0, splitIndex).trim();
+              buffer = buffer.slice(splitIndex + 2);
+              const dataLine = chunk.split('\n').find((line) => line.startsWith('data: '));
+              if (dataLine) {
+                try {
+                  const event = JSON.parse(dataLine.slice(6));
+                  if (event?.type && event.type !== 'connected') {
+                    setRealtimeTick((t) => t + 1);
+                  }
+                } catch {
+                }
+              }
+              splitIndex = buffer.indexOf('\n\n');
+            }
+          }
+        } catch {
+        }
+
+        if (!stopped) await sleep(1500);
+      }
+    };
+
+    if (myUserId) connectStream();
+
+    return () => {
+      stopped = true;
+      controller.abort();
+    };
+  }, [backendUrl, getToken, myUserId]);
 
   useEffect(() => {
     const syncThreads = async () => {
@@ -96,7 +165,7 @@ export default function MessagesTab() {
     syncThreads();
     const interval = window.setInterval(syncThreads, 8000);
     return () => window.clearInterval(interval);
-  }, [backendUrl, getToken, myUserId]);
+  }, [backendUrl, getToken, myUserId, realtimeTick]);
 
   useEffect(() => {
     const syncActiveThreadMessages = async () => {
@@ -128,7 +197,7 @@ export default function MessagesTab() {
     if (activeThreadId) syncActiveThreadMessages();
     const interval = window.setInterval(syncActiveThreadMessages, 5000);
     return () => window.clearInterval(interval);
-  }, [activeThreadId, backendUrl, getToken, myUserId]);
+  }, [activeThreadId, backendUrl, getToken, myUserId, realtimeTick]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
