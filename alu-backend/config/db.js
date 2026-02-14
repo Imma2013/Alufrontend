@@ -71,10 +71,30 @@ const NotificationSchema = new mongoose.Schema({
   read: { type: Boolean, default: false },
 }, { timestamps: true });
 
+// DM Thread Schema
+const DMThreadSchema = new mongoose.Schema({
+  participants: [{ type: String, required: true, index: true }],
+  createdBy: { type: String, required: true },
+  lastMessage: { type: String, default: '' },
+  lastMessageAt: { type: Date, default: Date.now, index: true },
+  unreadCounts: { type: Map, of: Number, default: {} }, // keyed by userId
+}, { timestamps: true });
+
+// DM Message Schema
+const DMMessageSchema = new mongoose.Schema({
+  threadId: { type: mongoose.Schema.Types.ObjectId, ref: 'DMThread', required: true, index: true },
+  senderId: { type: String, required: true, index: true },
+  text: { type: String, default: '', maxlength: 2000 },
+  imageUrl: { type: String, default: '' },
+  status: { type: String, enum: ['sent', 'seen'], default: 'sent' },
+}, { timestamps: true });
+
 const User = mongoose.model('User', UserSchema);
 const Post = mongoose.model('Post', PostSchema);
 const Comment = mongoose.model('Comment', CommentSchema);
 const Notification = mongoose.model('Notification', NotificationSchema);
+const DMThread = mongoose.model('DMThread', DMThreadSchema);
+const DMMessage = mongoose.model('DMMessage', DMMessageSchema);
 
 const connectDB = async () => {
   try {
@@ -101,4 +121,4 @@ const connectDB = async () => {
   }
 };
 
-module.exports = { connectDB, User, Post, Comment, Notification };
+module.exports = { connectDB, User, Post, Comment, Notification, DMThread, DMMessage };

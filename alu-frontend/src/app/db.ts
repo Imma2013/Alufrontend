@@ -43,20 +43,45 @@ export interface Story {
   viewedBy?: string[];
 }
 
+export interface DMThread {
+  _id: string;
+  userId: string;
+  participantId: string;
+  participantName: string;
+  participantAvatar?: string;
+  lastMessage?: string;
+  lastMessageAt: Date;
+  unreadCount: number;
+}
+
+export interface DMMessage {
+  _id: string;
+  threadId: string;
+  senderId: string;
+  text?: string;
+  imageUrl?: string;
+  createdAt: Date;
+  status?: 'sent' | 'seen';
+}
+
 export class AluDexie extends Dexie {
   posts!: Table<Post>;
   syncState!: Table<SyncState>;
   stories!: Table<Story>;
+  dmThreads!: Table<DMThread>;
+  dmMessages!: Table<DMMessage>;
 
   constructor() {
     super('aluDatabase');
 
     // Only declare the current schema version — no old versions
     // Old databases with ++id primary key will be deleted and recreated (see initDb below)
-    this.version(5).stores({
+    this.version(6).stores({
       posts: '_id, mediaType, timestamp, userId, synced, updatedAt',
       syncState: 'id',
-      stories: '_id, userId, createdAt, expiresAt'
+      stories: '_id, userId, createdAt, expiresAt',
+      dmThreads: '_id, userId, participantId, lastMessageAt, unreadCount',
+      dmMessages: '_id, threadId, senderId, createdAt'
     });
   }
 }

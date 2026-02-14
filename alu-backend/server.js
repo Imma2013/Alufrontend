@@ -17,6 +17,7 @@ const uploadRoutes = require('./routes/uploadRoutes');
 const userRoutes = require('./routes/userRoutes');
 const postRoutes = require('./routes/postRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const dmRoutes = require('./routes/dmRoutes');
 const clerkAuth = require('./middleware/clerkAuth');
 
 const app = express();
@@ -75,6 +76,7 @@ app.use('/upload', uploadLimiter, uploadRoutes);
 app.use('/users', userRoutes);
 app.use('/posts', postRoutes);
 app.use('/notifications', notificationRoutes);
+app.use('/dm', dmRoutes);
 
 // This route is now protected. A valid Clerk token is required.
 app.post('/generate', generateLimiter, clerkAuth, async (req, res) => {

@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '@clerk/nextjs';
-import { SearchIcon, MessagesIcon } from '../icons';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { useAuth, useUser } from '@clerk/nextjs';
+import { db, DMMessage, DMThread } from '../../db';
+import { MessagesIcon, SearchIcon } from '../icons';
 
 interface UserResult {
   userId: string;
@@ -11,17 +13,129 @@ interface UserResult {
   bio: string;
 }
 
+const formatThreadTime = (date: Date) => {
+  const ts = new Date(date).getTime();
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'now';
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d`;
+  return new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+
+const humanTime = (date: Date) =>
+  new Date(date).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
 export default function MessagesTab() {
   const { getToken } = useAuth();
+  const { user } = useUser();
+  const myUserId = user?.id || '';
+
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<UserResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [composer, setComposer] = useState('');
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [selectedImagePreview, setSelectedImagePreview] = useState<string>('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
-  // Debounced search — fires 300ms after user stops typing
+  const threads = useLiveQuery(
+    () => (myUserId ? db.dmThreads.where('userId').equals(myUserId).reverse().sortBy('lastMessageAt') : Promise.resolve([])),
+    [myUserId]
+  );
+
+  const messages = useLiveQuery(
+    () => (activeThreadId ? db.dmMessages.where('threadId').equals(activeThreadId).sortBy('createdAt') : Promise.resolve([])),
+    [activeThreadId]
+  );
+
+  useEffect(() => {
+    const onResize = () => setIsMobileView(window.innerWidth < 768);
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
+    const syncThreads = async () => {
+      if (!myUserId) return;
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch(`${backendUrl}/dm/threads`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const mapped: DMThread[] = (data.threads || []).map((thread: any) => ({
+          _id: thread._id,
+          userId: myUserId,
+          participantId: thread.participantId,
+          participantName: thread.participantName || 'Alu User',
+          participantAvatar: thread.participantAvatar || '',
+          lastMessage: thread.lastMessage || '',
+          lastMessageAt: new Date(thread.lastMessageAt || Date.now()),
+          unreadCount: Number(thread.unreadCount || 0),
+        }));
+        if (mapped.length > 0) {
+          await db.dmThreads.bulkPut(mapped);
+        }
+      } catch {
+      }
+    };
+
+    syncThreads();
+    const interval = window.setInterval(syncThreads, 8000);
+    return () => window.clearInterval(interval);
+  }, [backendUrl, getToken, myUserId]);
+
+  useEffect(() => {
+    const syncActiveThreadMessages = async () => {
+      if (!myUserId || !activeThreadId) return;
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch(`${backendUrl}/dm/threads/${activeThreadId}/messages`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const mapped: DMMessage[] = (data.messages || []).map((msg: any) => ({
+          _id: msg._id,
+          threadId: msg.threadId,
+          senderId: msg.senderId,
+          text: msg.text || '',
+          imageUrl: msg.imageUrl || '',
+          createdAt: new Date(msg.createdAt || Date.now()),
+          status: msg.status || 'sent',
+        }));
+        if (mapped.length > 0) {
+          await db.dmMessages.bulkPut(mapped);
+        }
+      } catch {
+      }
+    };
+
+    if (activeThreadId) syncActiveThreadMessages();
+    const interval = window.setInterval(syncActiveThreadMessages, 5000);
+    return () => window.clearInterval(interval);
+  }, [activeThreadId, backendUrl, getToken, myUserId]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages?.length, activeThreadId]);
+
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-
     if (!search.trim()) {
       setResults([]);
       return;
@@ -32,109 +146,424 @@ export default function MessagesTab() {
       try {
         const token = await getToken();
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
-        const res = await fetch(
-          `${backendUrl}/users/search?q=${encodeURIComponent(search.trim())}`,
-          { headers: token ? { 'Authorization': `Bearer ${token}` } : {} }
-        );
-
+        const res = await fetch(`${backendUrl}/users/search?q=${encodeURIComponent(search.trim())}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (res.ok) {
           const data = await res.json();
-          setResults(data.users || []);
+          setResults((data.users || []).filter((item: UserResult) => item.userId !== myUserId));
         }
-      } catch (err) {
-        console.error('Search failed:', err);
+      } catch {
+        setResults([]);
       } finally {
         setIsSearching(false);
       }
-    }, 300);
+    }, 250);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [search, getToken]);
+  }, [search, getToken, myUserId]);
+
+  const activeThread = useMemo(
+    () => (threads || []).find((thread) => thread._id === activeThreadId) || null,
+    [threads, activeThreadId]
+  );
+
+  const openThread = async (threadId: string) => {
+    setActiveThreadId(threadId);
+    await db.dmThreads.update(threadId, { unreadCount: 0 });
+    try {
+      const token = await getToken();
+      if (token) {
+        await fetch(`${backendUrl}/dm/threads/${threadId}/read`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+    } catch {
+    }
+  };
+
+  const startThreadWithUser = async (person: UserResult) => {
+    if (!myUserId) return;
+    const existing = await db.dmThreads
+      .where('userId')
+      .equals(myUserId)
+      .and((thread) => thread.participantId === person.userId)
+      .first();
+
+    if (existing) {
+      await openThread(existing._id);
+      setSearch('');
+      setResults([]);
+      return;
+    }
+
+    try {
+      const token = await getToken();
+      if (token) {
+        const res = await fetch(`${backendUrl}/dm/threads`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ participantId: person.userId }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const thread = data.thread;
+          await db.dmThreads.put({
+            _id: thread._id,
+            userId: myUserId,
+            participantId: thread.participantId,
+            participantName: thread.participantName || person.displayName || 'Alu User',
+            participantAvatar: thread.participantAvatar || person.avatarUrl || '',
+            lastMessage: thread.lastMessage || '',
+            lastMessageAt: new Date(thread.lastMessageAt || Date.now()),
+            unreadCount: Number(thread.unreadCount || 0),
+          });
+          await openThread(thread._id);
+        }
+      }
+    } catch {
+      const now = new Date();
+      const thread: DMThread = {
+        _id: `thread_${myUserId}_${person.userId}`,
+        userId: myUserId,
+        participantId: person.userId,
+        participantName: person.displayName || 'Alu User',
+        participantAvatar: person.avatarUrl || '',
+        lastMessage: '',
+        lastMessageAt: now,
+        unreadCount: 0,
+      };
+      await db.dmThreads.put(thread);
+      await openThread(thread._id);
+    }
+
+    setSearch('');
+    setResults([]);
+  };
+
+  const uploadImageToCloudinary = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', 'alu_comments');
+
+    const res = await fetch('https://api.cloudinary.com/v1_1/dqfvkvggd/image/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!res.ok) throw new Error('Image upload failed');
+    const json = await res.json();
+    return json.secure_url || '';
+  };
+
+  const onSelectImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+
+    if (selectedImagePreview.startsWith('blob:')) {
+      URL.revokeObjectURL(selectedImagePreview);
+    }
+
+    const preview = URL.createObjectURL(file);
+    setSelectedImageFile(file);
+    setSelectedImagePreview(preview);
+  };
+
+  const clearSelectedImage = () => {
+    if (selectedImagePreview.startsWith('blob:')) {
+      URL.revokeObjectURL(selectedImagePreview);
+    }
+    setSelectedImageFile(null);
+    setSelectedImagePreview('');
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  };
+
+  const sendMessage = async () => {
+    if (!activeThreadId || !myUserId) return;
+    const text = composer.trim();
+    if (!text && !selectedImageFile && !selectedImagePreview) return;
+
+    const now = new Date();
+    const localImageUrl = selectedImagePreview || '';
+    const message: DMMessage = {
+      _id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      threadId: activeThreadId,
+      senderId: myUserId,
+      text,
+      imageUrl: localImageUrl,
+      createdAt: now,
+      status: 'sent',
+    };
+
+    await db.dmMessages.put(message);
+    await db.dmThreads.update(activeThreadId, {
+      lastMessage: text || (localImageUrl ? 'Photo' : ''),
+      lastMessageAt: now,
+      unreadCount: 0,
+    });
+    setComposer('');
+    clearSelectedImage();
+
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      let uploadedImageUrl = '';
+      if (selectedImageFile) {
+        setUploadingImage(true);
+        uploadedImageUrl = await uploadImageToCloudinary(selectedImageFile);
+      }
+
+      const res = await fetch(`${backendUrl}/dm/threads/${activeThreadId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ text, imageUrl: uploadedImageUrl }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const confirmed = data.message;
+        await db.dmMessages.delete(message._id);
+        await db.dmMessages.put({
+          _id: confirmed._id,
+          threadId: confirmed.threadId,
+          senderId: confirmed.senderId,
+          text: confirmed.text || '',
+          imageUrl: confirmed.imageUrl || '',
+          createdAt: new Date(confirmed.createdAt || Date.now()),
+          status: confirmed.status || 'sent',
+        });
+      }
+    } catch {
+      // local-first fallback already persisted optimistic message
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (selectedImagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(selectedImagePreview);
+      }
+    };
+  }, [selectedImagePreview]);
+
+  const showThreadOnMobile = isMobileView && !!activeThread;
 
   return (
-    <div className="w-full max-w-[600px] mx-auto animate-fade-in">
-      {/* Search */}
-      <div className="px-4 py-3">
-        <div className="relative">
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-alu-text-tertiary">
-            <SearchIcon size={18} />
+    <div className="w-full h-[calc(100vh-120px)] md:h-[calc(100vh-56px)] max-w-[1200px] mx-auto animate-fade-in bg-white md:border-x md:border-[#efefef] flex">
+      {!showThreadOnMobile && (
+        <section className="w-full md:w-[380px] md:min-w-[380px] border-r border-[#efefef] flex flex-col">
+          <div className="px-4 pt-4 pb-3 border-b border-[#efefef]">
+            <h2 className="text-[20px] font-bold text-[#262626] mb-3">Messages</h2>
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8e8e8e]">
+                <SearchIcon size={16} />
+              </div>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search"
+                className="w-full h-9 pl-9 pr-3 rounded-lg bg-[#efefef] text-sm text-[#262626] placeholder:text-[#8e8e8e] outline-none"
+              />
+            </div>
           </div>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search people..."
-            className="w-full h-10 pl-10 pr-4 bg-alu-surface rounded-full text-sm text-alu-text placeholder:text-alu-text-tertiary outline-none focus:ring-2 focus:ring-[var(--alu-primary-glow)] transition-shadow"
-          />
-        </div>
-      </div>
 
-      <div className="h-[1px] bg-alu-border" />
+          <div className="flex-1 overflow-y-auto">
+            {search.trim() && (
+              <div className="border-b border-[#efefef]">
+                {isSearching && <p className="px-4 py-3 text-xs text-[#8e8e8e]">Searching...</p>}
+                {results.map((person) => (
+                  <button
+                    key={person.userId}
+                    onClick={() => startThreadWithUser(person)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[#fafafa] transition-colors"
+                  >
+                    {person.avatarUrl ? (
+                      <img src={person.avatarUrl} alt="" className="w-11 h-11 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-11 h-11 rounded-full bg-[#f2f2f2] text-[#8e8e8e] text-sm font-bold flex items-center justify-center">
+                        {(person.displayName || 'U')[0].toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-[#262626] truncate">{person.displayName || 'Alu User'}</p>
+                      {person.bio && <p className="text-xs text-[#8e8e8e] truncate">{person.bio}</p>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
 
-      {/* Search Results */}
-      {results.length > 0 && (
-        <div className="divide-y divide-alu-border">
-          {results.map((user) => (
-            <button
-              key={user.userId}
-              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-alu-surface/50 transition-colors text-left"
-            >
-              {user.avatarUrl ? (
-                <img
-                  src={user.avatarUrl}
-                  alt=""
-                  className="w-11 h-11 rounded-full object-cover flex-shrink-0"
-                />
+            {(threads || [])
+              .slice()
+              .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
+              .map((thread) => (
+                <button
+                  key={thread._id}
+                  onClick={() => openThread(thread._id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                    activeThreadId === thread._id ? 'bg-[#fafafa]' : 'hover:bg-[#fafafa]'
+                  }`}
+                >
+                  {thread.participantAvatar ? (
+                    <img src={thread.participantAvatar} alt="" className="w-12 h-12 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-[#f2f2f2] text-[#8e8e8e] text-sm font-bold flex items-center justify-center">
+                      {(thread.participantName || 'U')[0].toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-[#262626] truncate">{thread.participantName}</p>
+                    <p className="text-xs text-[#8e8e8e] truncate">
+                      {thread.lastMessage || 'Start conversation'} . {formatThreadTime(new Date(thread.lastMessageAt))}
+                    </p>
+                  </div>
+                  {thread.unreadCount > 0 && <div className="w-2 h-2 rounded-full bg-[#0095f6]" />}
+                </button>
+              ))}
+
+            {!search.trim() && (threads || []).length === 0 && (
+              <div className="text-center py-16 px-6">
+                <div className="w-16 h-16 rounded-full border border-[#dbdbdb] flex items-center justify-center mx-auto mb-4 text-[#8e8e8e]">
+                  <MessagesIcon size={28} />
+                </div>
+                <p className="text-base font-semibold text-[#262626] mb-1">Your messages</p>
+                <p className="text-sm text-[#8e8e8e]">Search someone to start chatting</p>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      <section className={`${showThreadOnMobile ? 'w-full' : 'hidden md:flex'} flex-1 flex-col`}>
+        {activeThread ? (
+          <>
+            <div className="h-[60px] border-b border-[#efefef] px-4 flex items-center gap-3">
+              {isMobileView && (
+                <button onClick={() => setActiveThreadId(null)} className="text-[#262626]">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="15,18 9,12 15,6" />
+                  </svg>
+                </button>
+              )}
+              {activeThread.participantAvatar ? (
+                <img src={activeThread.participantAvatar} alt="" className="w-8 h-8 rounded-full object-cover" />
               ) : (
-                <div className="w-11 h-11 rounded-full bg-alu-surface flex items-center justify-center text-sm font-bold text-alu-text-secondary flex-shrink-0">
-                  {(user.displayName || 'U')[0].toUpperCase()}
+                <div className="w-8 h-8 rounded-full bg-[#f2f2f2] text-[#8e8e8e] text-xs font-bold flex items-center justify-center">
+                  {(activeThread.participantName || 'U')[0].toUpperCase()}
                 </div>
               )}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-alu-text truncate">
-                  {user.displayName || 'Alu User'}
-                </p>
-                {user.bio && (
-                  <p className="text-xs text-alu-text-tertiary truncate">{user.bio}</p>
-                )}
+              <div>
+                <p className="text-sm font-semibold text-[#262626]">{activeThread.participantName}</p>
+                <p className="text-xs text-[#8e8e8e]">Active now</p>
               </div>
-              {/* Message icon placeholder — will open chat in the future */}
-              <div className="text-alu-text-tertiary">
-                <MessagesIcon size={20} />
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 py-4 bg-white">
+              {(messages || []).map((msg) => {
+                const mine = msg.senderId === myUserId;
+                return (
+                  <div key={msg._id} className={`flex ${mine ? 'justify-end' : 'justify-start'} mb-2.5`}>
+                    <div
+                      className={`max-w-[78%] px-3.5 py-2.5 rounded-2xl ${
+                        mine ? 'bg-[#3797f0] text-white rounded-br-md' : 'bg-[#efefef] text-[#262626] rounded-bl-md'
+                      }`}
+                    >
+                      {msg.imageUrl && (
+                        <img
+                          src={msg.imageUrl}
+                          alt=""
+                          className="w-full max-w-[220px] rounded-xl mb-2 object-cover"
+                        />
+                      )}
+                      {msg.text && <p className="text-sm leading-snug">{msg.text}</p>}
+                      <p className={`text-[10px] mt-1 ${mine ? 'text-white/80' : 'text-[#8e8e8e]'}`}>
+                        {humanTime(new Date(msg.createdAt))}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </div>
+
+            <div className="px-3 py-3 border-t border-[#efefef]">
+              {selectedImagePreview && (
+                <div className="mb-2.5 relative w-fit">
+                  <img src={selectedImagePreview} alt="" className="w-20 h-20 rounded-xl object-cover border border-[#efefef]" />
+                  <button
+                    onClick={clearSelectedImage}
+                    className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-black/75 text-white text-[10px] leading-none"
+                    aria-label="Remove image"
+                  >
+                    x
+                  </button>
+                </div>
+              )}
+              <div className="h-11 border border-[#dbdbdb] rounded-full flex items-center px-3 gap-2">
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={onSelectImage}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => imageInputRef.current?.click()}
+                  className="text-[#8e8e8e] hover:text-[#262626]"
+                  aria-label="Attach image"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="4" ry="4" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21,15 16,10 5,21" />
+                  </svg>
+                </button>
+                <input
+                  value={composer}
+                  onChange={(e) => setComposer(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      sendMessage();
+                    }
+                  }}
+                  placeholder="Message..."
+                  className="flex-1 text-sm text-[#262626] placeholder:text-[#8e8e8e] outline-none bg-transparent"
+                />
+                <button
+                  onClick={sendMessage}
+                  disabled={uploadingImage || (!composer.trim() && !selectedImagePreview)}
+                  className="text-sm font-semibold text-[#0095f6] disabled:opacity-40"
+                >
+                  {uploadingImage ? '...' : 'Send'}
+                </button>
               </div>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Loading state */}
-      {isSearching && (
-        <div className="text-center py-8">
-          <div className="w-6 h-6 border-2 border-[var(--alu-primary)] border-t-transparent rounded-full animate-spin mx-auto" />
-        </div>
-      )}
-
-      {/* Empty state */}
-      {!isSearching && results.length === 0 && (
-        <div className="text-center py-16">
-          <div className="w-16 h-16 rounded-full bg-alu-surface flex items-center justify-center mx-auto mb-4 text-alu-text-tertiary">
-            <MessagesIcon size={28} />
+            </div>
+          </>
+        ) : (
+          <div className="hidden md:flex flex-1 items-center justify-center text-center px-8">
+            <div>
+              <div className="w-20 h-20 rounded-full border border-[#dbdbdb] flex items-center justify-center mx-auto mb-4 text-[#8e8e8e]">
+                <MessagesIcon size={34} />
+              </div>
+              <p className="text-xl font-semibold text-[#262626] mb-1">Your messages</p>
+              <p className="text-sm text-[#8e8e8e]">Send private photos and messages to a friend.</p>
+            </div>
           </div>
-          {search.trim() ? (
-            <>
-              <p className="text-sm font-semibold text-alu-text mb-1">No users found</p>
-              <p className="text-xs text-alu-text-tertiary">Try a different name</p>
-            </>
-          ) : (
-            <>
-              <p className="text-sm font-semibold text-alu-text mb-1">Search for people</p>
-              <p className="text-xs text-alu-text-tertiary">Find someone to message</p>
-            </>
-          )}
-        </div>
-      )}
+        )}
+      </section>
     </div>
   );
 }
