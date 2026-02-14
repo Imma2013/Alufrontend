@@ -28,6 +28,8 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
   const [showComments, setShowComments] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [expandedCaptions, setExpandedCaptions] = useState<Set<string>>(new Set());
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
+  const [creatorAvatarByUser, setCreatorAvatarByUser] = useState<Record<string, string>>({});
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
   const touchStartTime = useRef(0);
@@ -109,6 +111,50 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
       setCurrentIndex(0);
     }
   }, [currentIndex, shortsList.length]);
+
+  useEffect(() => {
+    const hydrateVisibleCreatorProfiles = async () => {
+      const uniqueUserIds = Array.from(new Set(shortsList.map((p) => p.userId).filter(Boolean) as string[]));
+      const missing = uniqueUserIds.filter((id) => !creatorAvatarByUser[id]);
+      if (missing.length === 0) return;
+
+      try {
+        const token = await getToken();
+        await Promise.all(
+          missing.slice(0, 20).map(async (uid) => {
+            const res = await fetch(`${backendUrl}/users/${uid}`, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            if (!res.ok) return;
+            const profile = await res.json();
+            setCreatorAvatarByUser((prev) => ({
+              ...prev,
+              [uid]: profile.avatarUrl || '',
+            }));
+          })
+        );
+      } catch {
+      }
+    };
+
+    hydrateVisibleCreatorProfiles();
+  }, [shortsList, creatorAvatarByUser, backendUrl, getToken]);
+
+  useEffect(() => {
+    const hydrateCurrentCommentCount = async () => {
+      if (!short?._id) return;
+      try {
+        const res = await fetch(`${backendUrl}/posts/${short._id}/comments`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const comments = Array.isArray(data.comments) ? data.comments : [];
+        const total = comments.reduce((sum: number, c: any) => sum + 1 + (Array.isArray(c.replies) ? c.replies.length : 0), 0);
+        setCommentCounts((prev) => ({ ...prev, [short._id]: total }));
+      } catch {
+      }
+    };
+    hydrateCurrentCommentCount();
+  }, [short?._id, backendUrl, showComments]);
 
   const toggleLike = async () => {
     if (!short) return;
@@ -299,6 +345,7 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
   const visibleCaption = isCaptionLong && !isCaptionExpanded ? `${rawCaption.slice(0, MAX_CAPTION_CHARS).trimEnd()}...` : rawCaption;
   const isFollowingCreator = !!short.userId && followingIds.has(short.userId);
   const isOwnShort = short.userId === user?.id;
+  const creatorAvatar = short.avatarUrl || (short.userId ? creatorAvatarByUser[short.userId] : '') || '';
 
   return (
     <div className="w-full h-full min-h-[70vh] flex items-center justify-center animate-fade-in bg-black select-none" onWheel={handleWheel}>
@@ -360,9 +407,9 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
 
             <div className="absolute bottom-0 left-0 right-16 p-4 pointer-events-none">
               <div className="flex items-center gap-2 mb-2 pointer-events-auto">
-                {short.avatarUrl ? (
+                {creatorAvatar ? (
                   <button onClick={() => short.userId && onViewUser?.(short.userId)}>
-                    <img src={short.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-white/60" />
+                    <img src={creatorAvatar} alt="" className="w-8 h-8 rounded-full object-cover border border-white/60" />
                   </button>
                 ) : (
                   <button
@@ -413,23 +460,6 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
             </div>
 
             <div className="absolute bottom-20 right-3 flex flex-col items-center gap-5">
-              <button
-                className="relative"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (short.userId) onViewUser?.(short.userId);
-                }}
-                aria-label="Creator profile"
-              >
-                {short.avatarUrl ? (
-                  <img src={short.avatarUrl} alt="" className="w-11 h-11 rounded-full object-cover border-2 border-white/90" />
-                ) : (
-                  <div className="w-11 h-11 rounded-full bg-white/20 backdrop-blur-sm border-2 border-white/90 flex items-center justify-center text-white text-xs font-bold">
-                    {(short.displayName || short.userId || 'U')[0].toUpperCase()}
-                  </div>
-                )}
-              </button>
-
               <button onClick={(e) => { e.stopPropagation(); toggleLike(); }} className="flex flex-col items-center gap-1">
                 <div className={`w-11 h-11 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center transition-colors ${liked.has(shortKey) ? 'text-red-400' : 'text-white'}`}>
                   <HeartIcon size={24} />
@@ -443,7 +473,9 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
                 }`}>
                   <CommentIcon size={24} />
                 </div>
-                {(short.commentsCount ?? 0) > 0 && <span className="text-white text-[11px] font-medium">{short.commentsCount}</span>}
+                {((commentCounts[short._id] ?? short.commentsCount) || 0) > 0 && (
+                  <span className="text-white text-[11px] font-medium">{commentCounts[short._id] ?? short.commentsCount}</span>
+                )}
               </button>
 
               <button onClick={(e) => { e.stopPropagation(); toggleSave(); }} className="flex flex-col items-center gap-1">
