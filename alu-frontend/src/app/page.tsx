@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { UserButton, useUser, SignInButton } from '@clerk/nextjs';
-import { initDb } from './db';
+import { UserButton, useUser, SignInButton, useAuth } from '@clerk/nextjs';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { initDb, db, Post } from './db';
 import {
   HomeIcon,
   ShortsIcon,
@@ -23,9 +24,46 @@ import NotificationsTab from './components/tabs/NotificationsTab';
 type Tab = 'home' | 'shorts' | 'videos' | 'create' | 'profile' | 'notifications';
 
 const TABS_WITH_HEADER: Tab[] = ['home', 'shorts', 'videos'];
+const SEARCH_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'this', 'that', 'from', 'your', 'you', 'are', 'was', 'were',
+  'have', 'has', 'had', 'not', 'but', 'all', 'new', 'now', 'out', 'just', 'into', 'about',
+  'what', 'when', 'where', 'how', 'why', 'who', 'its', 'our', 'their', 'they', 'them',
+]);
+
+interface SearchUserSuggestion {
+  userId: string;
+  displayName: string;
+  avatarUrl: string;
+}
+
+function buildKeywordSuggestions(query: string, posts: Post[]): string[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return [];
+
+  const frequencies = new Map<string, number>();
+  for (const post of posts) {
+    const searchable = `${post.safePrompt || ''} ${post.displayName || ''}`.toLowerCase();
+    if (!searchable.includes(normalizedQuery)) continue;
+
+    const words = searchable.split(/[^a-z0-9]+/g);
+    for (const word of words) {
+      if (word.length < 3 || SEARCH_STOPWORDS.has(word)) continue;
+      if (!word.includes(normalizedQuery)) continue;
+      frequencies.set(word, (frequencies.get(word) || 0) + 1);
+    }
+  }
+
+  const ranked = [...frequencies.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([word]) => word)
+    .slice(0, 6);
+
+  return [normalizedQuery, ...ranked.filter((word) => word !== normalizedQuery)].slice(0, 6);
+}
 
 export default function App() {
   const { isSignedIn, isLoaded } = useUser();
+  const { getToken } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [viewUserId, setViewUserId] = useState<string | null>(null);
 
@@ -47,13 +85,23 @@ export default function App() {
   const [showAI, setShowAI] = useState(true);
   const [showNormal, setShowNormal] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [homeSearchInput, setHomeSearchInput] = useState('');
   const [homeSearchQuery, setHomeSearchQuery] = useState('');
   const [shortsSearchQuery, setShortsSearchQuery] = useState('');
   const [videosSearchQuery, setVideosSearchQuery] = useState('');
+  const [homeKeywordSuggestions, setHomeKeywordSuggestions] = useState<string[]>([]);
+  const [homePeopleSuggestions, setHomePeopleSuggestions] = useState<SearchUserSuggestion[]>([]);
+  const [homeSuggestionOpen, setHomeSuggestionOpen] = useState(false);
+  const [homeSuggestionLoading, setHomeSuggestionLoading] = useState(false);
+
+  const homePostsForSuggestions = useLiveQuery(
+    () => db.posts.orderBy('timestamp').reverse().limit(300).toArray(),
+    []
+  );
 
   const activeSearchQuery =
     activeTab === 'home'
-      ? homeSearchQuery
+      ? homeSearchInput
       : activeTab === 'shorts'
         ? shortsSearchQuery
         : activeTab === 'videos'
@@ -61,10 +109,78 @@ export default function App() {
           : '';
 
   const setActiveSearchQuery = (value: string) => {
-    if (activeTab === 'home') setHomeSearchQuery(value);
+    if (activeTab === 'home') {
+      setHomeSearchInput(value);
+      setHomeSuggestionOpen(true);
+    }
     if (activeTab === 'shorts') setShortsSearchQuery(value);
     if (activeTab === 'videos') setVideosSearchQuery(value);
   };
+
+  useEffect(() => {
+    if (activeTab !== 'home' || !searchOpen) return;
+
+    const q = homeSearchInput.trim();
+    if (!q) {
+      setHomeKeywordSuggestions([]);
+      setHomePeopleSuggestions([]);
+      setHomeSuggestionLoading(false);
+      return;
+    }
+
+    const timeout = setTimeout(async () => {
+      setHomeSuggestionLoading(true);
+      setHomeKeywordSuggestions(buildKeywordSuggestions(q, homePostsForSuggestions || []));
+
+      try {
+        const token = await getToken();
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+        const res = await fetch(
+          `${backendUrl}/users/search?q=${encodeURIComponent(q)}`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const users = ((data.users || []) as SearchUserSuggestion[]).slice(0, 5);
+          setHomePeopleSuggestions(users);
+        } else {
+          setHomePeopleSuggestions([]);
+        }
+      } catch {
+        setHomePeopleSuggestions([]);
+      } finally {
+        setHomeSuggestionLoading(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timeout);
+  }, [homeSearchInput, activeTab, searchOpen, homePostsForSuggestions, getToken]);
+
+  const commitHomeKeywordSearch = (keyword: string) => {
+    const q = keyword.trim();
+    setHomeSearchInput(q);
+    setHomeSearchQuery(q);
+    setHomeSuggestionOpen(false);
+  };
+
+  const clearSearchForActiveTab = () => {
+    if (activeTab === 'home') {
+      setHomeSearchInput('');
+      setHomeSearchQuery('');
+      setHomeSuggestionOpen(false);
+      setHomeKeywordSuggestions([]);
+      setHomePeopleSuggestions([]);
+      return;
+    }
+    setActiveSearchQuery('');
+  };
+
+  const showHomeSuggestions =
+    activeTab === 'home' &&
+    searchOpen &&
+    homeSuggestionOpen &&
+    !!homeSearchInput.trim() &&
+    (homeSuggestionLoading || homeKeywordSuggestions.length > 0 || homePeopleSuggestions.length > 0);
 
   // Sign-in screen for logged-out users
   if (isLoaded && !isSignedIn) {
@@ -118,6 +234,66 @@ export default function App() {
     { key: 'profile', label: 'Profile', icon: (a) => <ProfileIcon active={a} size={22} /> },
   ];
 
+  const handleSearchInputBlur = () => {
+    setTimeout(() => {
+      setHomeSuggestionOpen(false);
+      if (activeTab === 'home') {
+        if (!homeSearchInput && !homeSearchQuery) setSearchOpen(false);
+      } else if (!activeSearchQuery) {
+        setSearchOpen(false);
+      }
+    }, 120);
+  };
+
+  const handleSearchInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (activeTab === 'home' && e.key === 'Enter') {
+      e.preventDefault();
+      if (homeSearchInput.trim()) commitHomeKeywordSearch(homeSearchInput);
+    }
+  };
+
+  const homeSuggestionsDropdown = showHomeSuggestions ? (
+    <div className="absolute top-[calc(100%+6px)] left-0 right-0 rounded-xl border border-alu-border bg-white shadow-[var(--alu-shadow-md)] py-1 z-[70]">
+      {homeSuggestionLoading && (
+        <div className="px-3 py-2 text-xs text-alu-text-tertiary">Searching...</div>
+      )}
+      {homeKeywordSuggestions.map((keyword) => (
+        <button
+          key={`kw-${keyword}`}
+          onMouseDown={() => commitHomeKeywordSearch(keyword)}
+          className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-alu-hover transition-colors"
+        >
+          <SearchIcon size={14} />
+          <span className="text-sm text-alu-text">{keyword}</span>
+        </button>
+      ))}
+      {homePeopleSuggestions.length > 0 && (
+        <div className="border-t border-alu-border mt-1 pt-1">
+          {homePeopleSuggestions.map((person) => (
+            <button
+              key={person.userId}
+              onMouseDown={() => {
+                setHomeSuggestionOpen(false);
+                setSearchOpen(false);
+                handleViewUser(person.userId);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-alu-hover transition-colors"
+            >
+              {person.avatarUrl ? (
+                <img src={person.avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover" />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-alu-surface flex items-center justify-center text-[10px] font-bold text-alu-text-secondary">
+                  {(person.displayName || 'U')[0].toUpperCase()}
+                </div>
+              )}
+              <span className="text-sm text-alu-text">{person.displayName || 'User'}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  ) : null;
+
   return (
     <div className="min-h-screen bg-[var(--alu-bg)]">
       {/* ====== MOBILE TOP BAR (below md) ====== */}
@@ -142,16 +318,22 @@ export default function App() {
                     placeholder="Search"
                     value={activeSearchQuery}
                     onChange={(e) => setActiveSearchQuery(e.target.value)}
+                    onFocus={() => { if (activeTab === 'home') setHomeSuggestionOpen(true); }}
+                    onKeyDown={handleSearchInputKeyDown}
                     autoFocus
-                    onBlur={() => { if (!activeSearchQuery) setSearchOpen(false); }}
+                    onBlur={handleSearchInputBlur}
                     className="w-full h-9 pl-8 pr-8 rounded-full text-sm bg-[var(--alu-surface)] text-[var(--alu-text)] placeholder:text-[var(--alu-text-tertiary)] outline-none ring-2 ring-[var(--alu-primary-glow)]"
                   />
                   <button
-                    onClick={() => { setSearchOpen(false); setActiveSearchQuery(''); }}
+                    onClick={() => {
+                      clearSearchForActiveTab();
+                      if (activeTab !== 'home') setSearchOpen(false);
+                    }}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--alu-text-tertiary)] hover:text-[var(--alu-text)]"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                   </button>
+                  {homeSuggestionsDropdown}
                 </div>
               ) : (
                 <div className="flex-1" />
@@ -159,7 +341,10 @@ export default function App() {
 
               {!searchOpen && (
                 <button
-                  onClick={() => setSearchOpen(true)}
+                  onClick={() => {
+                    setSearchOpen(true);
+                    if (activeTab === 'home') setHomeSuggestionOpen(true);
+                  }}
                   className="p-1.5 shrink-0 text-[var(--alu-text-secondary)] hover:text-[var(--alu-text)] transition-colors"
                 >
                   <SearchIcon size={22} />
@@ -268,20 +453,29 @@ export default function App() {
                   placeholder="Search"
                   value={activeSearchQuery}
                   onChange={(e) => setActiveSearchQuery(e.target.value)}
+                  onFocus={() => { if (activeTab === 'home') setHomeSuggestionOpen(true); }}
+                  onKeyDown={handleSearchInputKeyDown}
                   autoFocus
-                  onBlur={() => { if (!activeSearchQuery) setSearchOpen(false); }}
+                  onBlur={handleSearchInputBlur}
                   className="w-full h-10 pl-10 pr-10 rounded-full text-sm bg-[var(--alu-surface)] text-[var(--alu-text)] placeholder:text-[var(--alu-text-tertiary)] outline-none ring-2 ring-[var(--alu-primary-glow)]"
                 />
                 <button
-                  onClick={() => { setSearchOpen(false); setActiveSearchQuery(''); }}
+                  onClick={() => {
+                    clearSearchForActiveTab();
+                    if (activeTab !== 'home') setSearchOpen(false);
+                  }}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--alu-text-tertiary)] hover:text-[var(--alu-text)]"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                 </button>
+                {homeSuggestionsDropdown}
               </div>
             ) : (
               <button
-                onClick={() => setSearchOpen(true)}
+                onClick={() => {
+                  setSearchOpen(true);
+                  if (activeTab === 'home') setHomeSuggestionOpen(true);
+                }}
                 className="flex items-center gap-2 h-10 px-4 rounded-full bg-[var(--alu-surface)] text-[var(--alu-text-tertiary)] hover:bg-[var(--alu-hover)] transition-colors"
               >
                 <SearchIcon size={18} />
