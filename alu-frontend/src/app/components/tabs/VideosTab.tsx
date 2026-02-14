@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useAuth, useUser } from '@clerk/nextjs';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
 import { db, Post } from '../../db';
@@ -10,11 +11,11 @@ import { VideosIcon } from '../icons';
 
 interface VideosTabProps {
   searchQuery?: string;
+  showAI?: boolean;
+  showNormal?: boolean;
 }
 
-type SortMode = 'latest' | 'popular' | 'oldest';
-
-const TOPIC_CHIPS = ['All', 'AI', 'Uploads', 'Tutorials', 'Music', 'Gaming', 'Tech', 'News'];
+type FeedMode = 'for-you' | 'following';
 
 const formatDuration = (seconds: number): string => {
   if (!Number.isFinite(seconds) || seconds <= 0) return '1:00+';
@@ -46,37 +47,17 @@ const timeAgo = (date: Date | string): string => {
   return `${Math.floor(months / 12)}y ago`;
 };
 
-const hashSeed = (value: string): number => {
-  let hash = 0;
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash << 5) - hash + value.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
-};
-
-const inferViews = (post: Post): number => {
-  const base = (post.likes || 0) * 31 + (post.commentsCount || 0) * 19;
-  const seed = hashSeed(post._id) % 4200;
-  const minimum = post.is_ai ? 320 : 480;
-  return Math.max(base + seed, minimum);
-};
-
-const classifyTopic = (post: Post): string => {
-  if (post.is_ai) return 'AI';
-  const text = `${post.safePrompt || ''} ${post.caption || ''}`.toLowerCase();
-  if (/(how to|tutorial|guide|lesson|tips)/.test(text)) return 'Tutorials';
-  if (/(song|beat|music|cover|audio)/.test(text)) return 'Music';
-  if (/(game|gaming|stream|esports)/.test(text)) return 'Gaming';
-  if (/(tech|ai|software|coding|app|product)/.test(text)) return 'Tech';
-  if (/(news|update|report|breaking)/.test(text)) return 'News';
-  return 'Uploads';
-};
-
-export default function VideosTab({ searchQuery = '' }: VideosTabProps) {
+export default function VideosTab({
+  searchQuery = '',
+  showAI = true,
+  showNormal = true,
+}: VideosTabProps) {
   const router = useRouter();
-  const [activeChip, setActiveChip] = useState<string>('All');
-  const [sortMode, setSortMode] = useState<SortMode>('latest');
+  const { user } = useUser();
+  const { getToken } = useAuth();
+
+  const [feedMode, setFeedMode] = useState<FeedMode>('for-you');
+  const [followingUserIds, setFollowingUserIds] = useState<string[]>([]);
   const [durationMap, setDurationMap] = useState<Record<string, string>>({});
   const [hoveredVideoId, setHoveredVideoId] = useState<string | null>(null);
   const [previewSrcMap, setPreviewSrcMap] = useState<Record<string, string>>({});
@@ -91,6 +72,41 @@ export default function VideosTab({ searchQuery = '' }: VideosTabProps) {
     []
   );
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFollowing = async () => {
+      if (!user?.id) {
+        setFollowingUserIds([]);
+        return;
+      }
+
+      try {
+        const token = await getToken();
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+        const res = await fetch(`${backendUrl}/users/${user.id}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) {
+          if (!cancelled) setFollowingUserIds([]);
+          return;
+        }
+
+        const data = await res.json();
+        if (!cancelled) {
+          setFollowingUserIds(Array.isArray(data.following) ? data.following : []);
+        }
+      } catch {
+        if (!cancelled) setFollowingUserIds([]);
+      }
+    };
+
+    void loadFollowing();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, getToken]);
+
   const scopedVideos = useMemo(() => {
     const searched = (videos || []).filter((p: Post) => {
       if (!searchQuery.trim()) return true;
@@ -102,23 +118,16 @@ export default function VideosTab({ searchQuery = '' }: VideosTabProps) {
       );
     });
 
-    const byChip =
-      activeChip === 'All'
-        ? searched
-        : searched.filter((p: Post) => {
-            if (activeChip === 'AI') return p.is_ai;
-            return classifyTopic(p) === activeChip;
-          });
+    const byMode =
+      feedMode === 'following'
+        ? searched.filter((p) => followingUserIds.includes(p.userId))
+        : searched;
 
-    const sorted = [...byChip];
-    sorted.sort((a, b) => {
-      if (sortMode === 'latest') return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-      if (sortMode === 'oldest') return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-      return inferViews(b) - inferViews(a);
+    return byMode.filter((p) => {
+      if (p.is_ai) return showAI;
+      return showNormal;
     });
-
-    return sorted;
-  }, [videos, searchQuery, activeChip, sortMode]);
+  }, [videos, searchQuery, feedMode, followingUserIds, showAI, showNormal]);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,7 +174,7 @@ export default function VideosTab({ searchQuery = '' }: VideosTabProps) {
     };
 
     if (scopedVideos.length > 0) {
-      loadDurations();
+      void loadDurations();
     }
 
     return () => {
@@ -193,167 +202,146 @@ export default function VideosTab({ searchQuery = '' }: VideosTabProps) {
       }
     };
 
-    loadPreviewSource();
+    void loadPreviewSource();
     return () => {
       cancelled = true;
     };
   }, [hoveredVideoId, scopedVideos, previewSrcMap]);
-
-  if (scopedVideos.length === 0) {
-    return (
-      <div className="w-full max-w-[1900px] mx-auto px-2 sm:px-4 md:px-6 animate-fade-in">
-        <div className="text-center py-20">
-          <div className="w-16 h-16 rounded-full bg-alu-surface flex items-center justify-center mx-auto mb-4 text-alu-text-tertiary border border-alu-border">
-            <VideosIcon size={28} />
-          </div>
-          <p className="text-base font-semibold text-alu-text mb-1">No videos found</p>
-          <p className="text-sm text-alu-text-tertiary">Try another topic, search, or upload your first long-form video</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="w-full max-w-[2100px] mx-auto px-0 sm:px-3 md:px-6 pb-8 animate-fade-in">
       <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-alu-border mb-3 px-2 sm:px-1 shadow-[0_1px_0_0_rgba(0,0,0,0.03)]">
         <div className="py-3 overflow-x-auto hide-scrollbar">
           <div className="flex items-center gap-2 min-w-max pr-2">
-            {TOPIC_CHIPS.map((chip) => (
-              <button
-                key={chip}
-                onClick={() => setActiveChip(chip)}
-                className={`px-3.5 h-8 rounded-lg text-sm font-semibold transition-colors ${
-                  activeChip === chip
-                    ? 'bg-alu-text text-white'
-                    : 'bg-[#f2f2f2] text-[#0f0f0f] hover:bg-[#e5e5e5]'
-                }`}
-              >
-                {chip}
-              </button>
-            ))}
-            <div className="w-px h-5 bg-alu-border mx-1" />
             <button
-              onClick={() => setSortMode('latest')}
-              className={`px-3 h-8 rounded-lg text-sm font-medium ${
-                sortMode === 'latest' ? 'bg-[#0f0f0f] text-white' : 'bg-[#f2f2f2] text-[#0f0f0f] hover:bg-[#e5e5e5]'
+              onClick={() => setFeedMode('for-you')}
+              className={`px-3.5 h-8 rounded-lg text-sm font-semibold transition-colors ${
+                feedMode === 'for-you'
+                  ? 'bg-[#0f0f0f] text-white'
+                  : 'bg-[#f2f2f2] text-[#0f0f0f] hover:bg-[#e5e5e5]'
               }`}
             >
-              Latest
+              For You
             </button>
             <button
-              onClick={() => setSortMode('popular')}
-              className={`px-3 h-8 rounded-lg text-sm font-medium ${
-                sortMode === 'popular' ? 'bg-[#0f0f0f] text-white' : 'bg-[#f2f2f2] text-[#0f0f0f] hover:bg-[#e5e5e5]'
+              onClick={() => setFeedMode('following')}
+              className={`px-3.5 h-8 rounded-lg text-sm font-semibold transition-colors ${
+                feedMode === 'following'
+                  ? 'bg-[#0f0f0f] text-white'
+                  : 'bg-[#f2f2f2] text-[#0f0f0f] hover:bg-[#e5e5e5]'
               }`}
             >
-              Popular
-            </button>
-            <button
-              onClick={() => setSortMode('oldest')}
-              className={`px-3 h-8 rounded-lg text-sm font-medium ${
-                sortMode === 'oldest' ? 'bg-[#0f0f0f] text-white' : 'bg-[#f2f2f2] text-[#0f0f0f] hover:bg-[#e5e5e5]'
-              }`}
-            >
-              Oldest
+              Following
             </button>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-x-4 gap-y-6 md:gap-y-8 px-2 sm:px-1">
-        {scopedVideos.map((video) => {
-          const views = inferViews(video);
-          const previewSrc = previewSrcMap[video._id];
-          const isHovered = hoveredVideoId === video._id;
+      {scopedVideos.length === 0 ? (
+        <div className="w-full max-w-[1900px] mx-auto px-2 sm:px-4 md:px-6 animate-fade-in">
+          <div className="text-center py-20">
+            <div className="w-16 h-16 rounded-full bg-alu-surface flex items-center justify-center mx-auto mb-4 text-alu-text-tertiary border border-alu-border">
+              <VideosIcon size={28} />
+            </div>
+            <p className="text-base font-semibold text-alu-text mb-1">
+              {feedMode === 'following' ? 'No videos from people you follow yet' : 'No videos found'}
+            </p>
+            <p className="text-sm text-alu-text-tertiary">
+              {feedMode === 'following'
+                ? 'Follow more creators to build your Following feed'
+                : 'Try another search or upload your first long-form video'}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-x-4 gap-y-6 md:gap-y-8 px-2 sm:px-1">
+          {scopedVideos.map((video) => {
+            const previewSrc = previewSrcMap[video._id];
+            const isHovered = hoveredVideoId === video._id;
+            const likes = Number.isFinite(video.likes) ? (video.likes as number) : 0;
 
-          return (
-            <button
-              key={video._id}
-              className="group text-left w-full"
-              onClick={() => router.push(`/watch/${video._id}`)}
-              aria-label={`Open video ${video.safePrompt || 'Video'}`}
-              onMouseEnter={() => setHoveredVideoId(video._id)}
-              onMouseLeave={() => setHoveredVideoId((prev) => (prev === video._id ? null : prev))}
-            >
-              <div className="w-full aspect-video rounded-xl overflow-hidden relative bg-alu-surface">
-                {video.thumbnailUrl ? (
-                  <img
-                    src={video.thumbnailUrl}
-                    alt=""
-                    className={`w-full h-full object-cover transition-opacity duration-300 ${isHovered && previewSrc ? 'opacity-0' : 'opacity-100'}`}
-                  />
-                ) : (
-                  <div className="w-full h-full">
-                    <MediaItem post={video} />
+            return (
+              <button
+                key={video._id}
+                className="group text-left w-full"
+                onClick={() => router.push(`/watch/${video._id}`)}
+                aria-label={`Open video ${video.safePrompt || 'Video'}`}
+                onMouseEnter={() => setHoveredVideoId(video._id)}
+                onMouseLeave={() => setHoveredVideoId((prev) => (prev === video._id ? null : prev))}
+              >
+                <div className="w-full aspect-video rounded-xl overflow-hidden relative bg-alu-surface">
+                  {video.thumbnailUrl ? (
+                    <img
+                      src={video.thumbnailUrl}
+                      alt=""
+                      className={`w-full h-full object-cover transition-opacity duration-300 ${isHovered && previewSrc ? 'opacity-0' : 'opacity-100'}`}
+                    />
+                  ) : (
+                    <div className="w-full h-full">
+                      <MediaItem post={video} />
+                    </div>
+                  )}
+
+                  {previewSrc && (
+                    <video
+                      src={previewSrc}
+                      muted
+                      autoPlay={isHovered}
+                      loop
+                      playsInline
+                      preload="metadata"
+                      className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0'}`}
+                    />
+                  )}
+
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <div className="w-12 h-12 rounded-full bg-black/65 backdrop-blur-sm flex items-center justify-center md:hidden">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+                        <polygon points="8,5 19,12 8,19" />
+                      </svg>
+                    </div>
                   </div>
-                )}
 
-                {previewSrc && (
-                  <video
-                    src={previewSrc}
-                    muted
-                    autoPlay={isHovered}
-                    loop
-                    playsInline
-                    preload="metadata"
-                    className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0'}`}
-                  />
-                )}
-
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                  <div className="w-12 h-12 rounded-full bg-black/65 backdrop-blur-sm flex items-center justify-center md:hidden">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-                      <polygon points="8,5 19,12 8,19" />
-                    </svg>
+                  <div className="absolute bottom-2 right-2 text-[11px] font-semibold px-1.5 py-0.5 rounded bg-black/85 text-white">
+                    {durationMap[video._id] || '1:00+'}
                   </div>
+
+                  {video.is_ai && (
+                    <div className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded bg-black/65 text-white backdrop-blur-sm">
+                      AI
+                    </div>
+                  )}
                 </div>
 
-                <div className="absolute bottom-2 right-2 text-[11px] font-semibold px-1.5 py-0.5 rounded bg-black/85 text-white">
-                  {durationMap[video._id] || '1:00+'}
-                </div>
-
-                {video.is_ai && (
-                  <div className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded bg-black/65 text-white backdrop-blur-sm">
-                    AI
+                <div className="flex gap-3 mt-2.5 px-0.5">
+                  {video.avatarUrl ? (
+                    <img
+                      src={video.avatarUrl}
+                      alt=""
+                      className="w-9 h-9 rounded-full object-cover shrink-0 mt-0.5 border border-alu-border"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-alu-surface flex items-center justify-center text-xs font-semibold text-alu-text-secondary shrink-0 mt-0.5 border border-alu-border">
+                      {(video.displayName || video.userId || 'U')[0].toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-[14px] md:text-[15px] font-semibold text-[#0f0f0f] leading-snug line-clamp-2">
+                      {video.safePrompt || video.caption || 'Untitled video'}
+                    </h3>
+                    <p className="text-[12px] md:text-[13px] text-[#606060] mt-1 line-clamp-1">
+                      {video.displayName || 'Alu User'}
+                    </p>
+                    <p className="text-xs text-[#606060] mt-0.5">
+                      {formatCount(likes)} likes - {timeAgo(video.timestamp)}
+                    </p>
                   </div>
-                )}
-              </div>
-
-              <div className="flex gap-3 mt-2.5 px-0.5">
-                {video.avatarUrl ? (
-                  <img
-                    src={video.avatarUrl}
-                    alt=""
-                    className="w-9 h-9 rounded-full object-cover shrink-0 mt-0.5 border border-alu-border"
-                  />
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-alu-surface flex items-center justify-center text-xs font-semibold text-alu-text-secondary shrink-0 mt-0.5 border border-alu-border">
-                    {(video.displayName || video.userId || 'U')[0].toUpperCase()}
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-[14px] md:text-[15px] font-semibold text-[#0f0f0f] leading-snug line-clamp-2">
-                    {video.safePrompt || video.caption || 'Untitled video'}
-                  </h3>
-                  <p className="text-[12px] md:text-[13px] text-[#606060] mt-1 line-clamp-1">
-                    {video.displayName || 'Alu User'}
-                  </p>
-                  <p className="text-xs text-[#606060] mt-0.5">
-                    {formatCount(views)} views - {timeAgo(video.timestamp)}
-                  </p>
                 </div>
-                <div className="shrink-0 text-[#606060] mt-0.5">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <circle cx="12" cy="5" r="1.7" />
-                    <circle cx="12" cy="12" r="1.7" />
-                    <circle cx="12" cy="19" r="1.7" />
-                  </svg>
-                </div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

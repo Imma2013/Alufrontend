@@ -9,6 +9,7 @@ import {
   ShortsIcon,
   VideosIcon,
   NotificationsIcon,
+  MessagesIcon,
   ProfileIcon,
   CreateIcon,
   SearchIcon,
@@ -20,8 +21,9 @@ import VideosTab from './components/tabs/VideosTab';
 import CreateTab from './components/tabs/CreateTab';
 import ProfileTab from './components/tabs/ProfileTab';
 import NotificationsTab from './components/tabs/NotificationsTab';
+import MessagesTab from './components/tabs/MessagesTab';
 
-type Tab = 'home' | 'shorts' | 'videos' | 'create' | 'profile' | 'notifications';
+type Tab = 'home' | 'shorts' | 'videos' | 'create' | 'profile' | 'notifications' | 'messages';
 
 const TABS_WITH_HEADER: Tab[] = ['home', 'shorts', 'videos'];
 const SEARCH_STOPWORDS = new Set([
@@ -114,6 +116,7 @@ export default function App() {
   const [homeSuggestionOpen, setHomeSuggestionOpen] = useState(false);
   const [homeSuggestionLoading, setHomeSuggestionLoading] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
   const homePostsForSuggestions = useLiveQuery(
     () => db.posts.orderBy('timestamp').reverse().limit(300).toArray(),
@@ -201,8 +204,39 @@ export default function App() {
   }, [getToken]);
 
   useEffect(() => {
+    const fetchUnreadMessages = async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+        const res = await fetch(`${backendUrl}/dm/threads`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const total = (data.threads || []).reduce(
+          (sum: number, thread: { unreadCount?: number }) => sum + Number(thread.unreadCount || 0),
+          0
+        );
+        setUnreadMessages(total);
+      } catch {
+      }
+    };
+
+    fetchUnreadMessages();
+    const interval = setInterval(fetchUnreadMessages, 8000);
+    return () => clearInterval(interval);
+  }, [getToken]);
+
+  useEffect(() => {
     if (activeTab === 'notifications') {
       setUnreadNotifications(0);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'messages') {
+      setUnreadMessages(0);
     }
   }, [activeTab]);
 
@@ -274,6 +308,7 @@ export default function App() {
     { key: 'shorts', label: 'Shorts', icon: (a) => <ShortsIcon active={a} /> },
     { key: 'videos', label: 'Videos', icon: (a) => <VideosIcon active={a} /> },
     { key: 'notifications', label: 'Notifications', icon: (a) => <NotificationsIcon active={a} /> },
+    { key: 'messages', label: 'Messages', icon: (a) => <MessagesIcon active={a} /> },
     { key: 'profile', label: 'Profile', icon: (a) => <ProfileIcon active={a} /> },
   ];
 
@@ -456,6 +491,15 @@ export default function App() {
               <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-red-500" />
             )}
           </button>
+          <button
+            onClick={() => handleTabChange('messages')}
+            className={`relative p-1.5 shrink-0 transition-colors ${activeTab === 'messages' ? 'text-[var(--alu-primary)]' : 'text-[var(--alu-text-secondary)] hover:text-[var(--alu-text)]'}`}
+          >
+            <MessagesIcon size={20} active={activeTab === 'messages'} />
+            {unreadMessages > 0 && activeTab !== 'messages' && (
+              <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-red-500" />
+            )}
+          </button>
         </div>
       </header>
 
@@ -484,6 +528,9 @@ export default function App() {
                 <span className={`relative ${isActive ? 'text-[var(--alu-primary)]' : ''}`}>
                   {item.icon(isActive)}
                   {item.key === 'notifications' && unreadNotifications > 0 && activeTab !== 'notifications' && (
+                    <span className="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-red-500" />
+                  )}
+                  {item.key === 'messages' && unreadMessages > 0 && activeTab !== 'messages' && (
                     <span className="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-red-500" />
                   )}
                 </span>
@@ -586,10 +633,11 @@ export default function App() {
         <div className="w-full">
           {activeTab === 'home' && <HomeTab showAI={showAI} showNormal={showNormal} searchQuery={homeSearchQuery} onViewUser={handleViewUser} />}
           {activeTab === 'shorts' && <ShortsTab searchQuery={shortsSearchQuery} onViewUser={handleViewUser} />}
-          {activeTab === 'videos' && <VideosTab searchQuery={videosSearchQuery} />}
+          {activeTab === 'videos' && <VideosTab searchQuery={videosSearchQuery} showAI={showAI} showNormal={showNormal} />}
           {activeTab === 'create' && <CreateTab />}
           {activeTab === 'profile' && <ProfileTab viewUserId={viewUserId} onBack={() => setViewUserId(null)} onViewUser={handleViewUser} />}
           {activeTab === 'notifications' && <NotificationsTab onReadAll={() => setUnreadNotifications(0)} />}
+          {activeTab === 'messages' && <MessagesTab />}
         </div>
       </main>
 
