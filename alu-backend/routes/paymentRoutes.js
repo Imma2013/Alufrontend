@@ -4,7 +4,14 @@ const Stripe = require('stripe');
 const { User } = require('../config/db');
 const clerkAuth = require('../middleware/clerkAuth');
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+let stripe = null;
+const getStripe = () => {
+  if (!process.env.STRIPE_SECRET_KEY) return null;
+  if (!stripe) {
+    stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  }
+  return stripe;
+};
 
 // Credit amounts for one-time purchases
 const IMAGE_CREDIT_PACK = {
@@ -27,6 +34,13 @@ router.post('/create-checkout-session', clerkAuth, async (req, res) => {
   if (!priceId) {
     return res.status(400).json({ error: 'Missing priceId' });
   }
+  if (!String(priceId).startsWith('price_')) {
+    return res.status(400).json({ error: 'Invalid Stripe priceId. Use a price_... ID, not a product ID.' });
+  }
+  const stripeClient = getStripe();
+  if (!stripeClient) {
+    return res.status(503).json({ error: 'Payments unavailable: STRIPE_SECRET_KEY is missing on backend.' });
+  }
 
   const purchaseType = mode === 'short'
     ? 'short_credit'
@@ -41,7 +55,7 @@ router.post('/create-checkout-session', clerkAuth, async (req, res) => {
   }
 
   try {
-    const session = await stripe.checkout.sessions.create({
+    const session = await stripeClient.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
         {
@@ -71,11 +85,15 @@ router.post('/create-checkout-session', clerkAuth, async (req, res) => {
  * Handles Stripe webhooks to fulfill orders/subscriptions.
  */
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const stripeClient = getStripe();
+  if (!stripeClient) {
+    return res.status(503).send('Payments unavailable');
+  }
   const sig = req.headers['stripe-signature'];
   let event;
 
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    event = stripeClient.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     console.error('Webhook signature verification failed.', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);

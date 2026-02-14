@@ -80,7 +80,7 @@ export default function CreateTab() {
     const text = await res.text().catch(() => '');
     const preview = text.replace(/\s+/g, ' ').slice(0, 180);
     if (preview.startsWith('<!DOCTYPE') || preview.startsWith('<html')) {
-      return `${fallback} (${res.status}). Received HTML instead of API JSON. Check NEXT_PUBLIC_BACKEND_URL.`;
+      return `${fallback} (${res.status}). Received HTML instead of API JSON from backend URL. Check NEXT_PUBLIC_BACKEND_URL and backend health.`;
     }
     return `${fallback} (${res.status}). Non-JSON response: ${preview || 'empty response'}`;
   };
@@ -133,6 +133,14 @@ export default function CreateTab() {
               ? 'Stripe short credit price is not configured.'
               : 'Stripe credit pack price is not configured.')
         );
+      }
+      if (!String(priceId).startsWith('price_')) {
+        throw new Error('Stripe frontend env must use a price_... ID (not prod_...).');
+      }
+
+      const health = await fetch(`${backendUrl}/`, { method: 'GET' });
+      if (!health.ok) {
+        throw new Error(`Backend is not reachable (${health.status}). Check NEXT_PUBLIC_BACKEND_URL.`);
       }
 
       const res = await fetch(`${backendUrl}/payments/create-checkout-session`, {
