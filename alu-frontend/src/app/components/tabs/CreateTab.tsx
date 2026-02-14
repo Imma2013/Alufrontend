@@ -73,6 +73,7 @@ export default function CreateTab() {
 
   const parseErrorResponse = async (res: Response, fallback: string) => {
     const contentType = res.headers.get('content-type') || '';
+    const calledUrl = res.url || `${backendUrl}/(unknown-endpoint)`;
     if (contentType.includes('application/json')) {
       const data = await res.json().catch(() => ({}));
       return data?.error || data?.message || `${fallback} (${res.status})`;
@@ -80,9 +81,9 @@ export default function CreateTab() {
     const text = await res.text().catch(() => '');
     const preview = text.replace(/\s+/g, ' ').slice(0, 180);
     if (preview.startsWith('<!DOCTYPE') || preview.startsWith('<html')) {
-      return `${fallback} (${res.status}). Received HTML instead of API JSON from backend URL. Check NEXT_PUBLIC_BACKEND_URL and backend health.`;
+      return `${fallback} (${res.status}). Received HTML instead of API JSON from: ${calledUrl}`;
     }
-    return `${fallback} (${res.status}). Non-JSON response: ${preview || 'empty response'}`;
+    return `${fallback} (${res.status}). Non-JSON response from ${calledUrl}: ${preview || 'empty response'}`;
   };
 
   useEffect(() => {
@@ -492,7 +493,7 @@ export default function CreateTab() {
           <div>
             <p className="text-sm font-bold text-alu-text">Need more AI credits?</p>
             <p className="text-xs text-alu-text-secondary mt-1">
-              Free: 3 images/day, 1 short/day. Upgrade to top up more.
+              Free: 3 images/day, 1 short/week.
             </p>
           </div>
           <button
@@ -617,7 +618,7 @@ export default function CreateTab() {
                     </span>
                     <span className="text-sm font-bold text-alu-text">Shorts Remaining</span>
                   </div>
-                  <p className="text-xs text-alu-text-secondary">Resets daily</p>
+                  <p className="text-xs text-alu-text-secondary">Resets weekly</p>
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-[var(--alu-primary)]">
