@@ -38,6 +38,13 @@ interface OtherUserProfile {
   counts: { posts: number; shorts: number; videos: number };
 }
 
+interface LookupUser {
+  userId: string;
+  displayName: string;
+  avatarUrl: string;
+  bio: string;
+}
+
 export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUser }: ProfileTabProps) {
   const { user } = useUser();
   const { signOut } = useClerk();
@@ -58,6 +65,11 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [deletingPost, setDeletingPost] = useState<Post | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [connectionsModal, setConnectionsModal] = useState<null | 'followers' | 'following'>(null);
+  const [connectionsLoading, setConnectionsLoading] = useState(false);
+  const [connectionsError, setConnectionsError] = useState('');
+  const [connectionUsers, setConnectionUsers] = useState<LookupUser[]>([]);
 
   // Other user state
   const [otherUser, setOtherUser] = useState<OtherUserProfile | null>(null);
@@ -76,6 +88,8 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
   const [followingCount, setFollowingCount] = useState(0);
   const [ownFollowersCount, setOwnFollowersCount] = useState(0);
   const [ownFollowingCount, setOwnFollowingCount] = useState(0);
+  const [ownFollowers, setOwnFollowers] = useState<string[]>([]);
+  const [ownFollowing, setOwnFollowing] = useState<string[]>([]);
 
   const backendUrl = BACKEND_URL;
 
@@ -88,6 +102,8 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
         if (data) {
           setOwnFollowersCount(data.followersCount || 0);
           setOwnFollowingCount(data.followingCount || 0);
+          setOwnFollowers(Array.isArray(data.followers) ? data.followers : []);
+          setOwnFollowing(Array.isArray(data.following) ? data.following : []);
         }
       })
       .catch(() => {});
@@ -357,9 +373,13 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
   const handleDeletePost = async () => {
     if (!deletingPost) return;
     setIsDeleting(true);
+    setDeleteError('');
     try {
       const token = await getToken();
-      if (!token) return;
+      if (!token) {
+        setDeleteError('Missing auth token. Please sign in again.');
+        return;
+      }
 
       const backendUrl = BACKEND_URL;
       const res = await fetch(`${backendUrl}/posts/${deletingPost._id}`, {
@@ -367,19 +387,73 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
-      if (res.ok) {
-        // Remove from local Dexie
-        try { await db.posts.delete(deletingPost._id); } catch { /* ok */ }
-        // Remove from other user posts if applicable
-        if (!isOwnProfile) {
-          setOtherUserPosts(prev => prev.filter(p => p._id !== deletingPost._id));
+      if (!res.ok) {
+        let message = `Delete failed (${res.status})`;
+        try {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = await res.json();
+            if (data?.error) message = String(data.error);
+          }
+        } catch {
         }
+        setDeleteError(message);
+        return;
       }
+
+      // Remove from local Dexie
+      try { await db.posts.delete(deletingPost._id); } catch { /* ok */ }
+      // Remove from other user posts if applicable
+      if (!isOwnProfile) {
+        setOtherUserPosts(prev => prev.filter(p => p._id !== deletingPost._id));
+      }
+      setDeletingPost(null);
     } catch (err) {
       console.error('Delete failed:', err);
+      setDeleteError(err instanceof Error ? err.message : 'Delete failed');
     } finally {
       setIsDeleting(false);
-      setDeletingPost(null);
+    }
+  };
+
+  const openConnections = async (mode: 'followers' | 'following') => {
+    if (!isOwnProfile) return;
+    const ids = mode === 'followers' ? ownFollowers : ownFollowing;
+    setConnectionsModal(mode);
+    setConnectionsLoading(true);
+    setConnectionsError('');
+    setConnectionUsers([]);
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        setConnectionsError('Could not load list right now.');
+        return;
+      }
+      if (!ids.length) {
+        setConnectionUsers([]);
+        return;
+      }
+
+      const res = await fetch(`${backendUrl}/users/lookup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ userIds: ids }),
+      });
+      if (!res.ok) {
+        setConnectionsError('Failed to load users.');
+        return;
+      }
+      const data = await res.json();
+      const users = Array.isArray(data.users) ? data.users : [];
+      setConnectionUsers(users);
+    } catch {
+      setConnectionsError('Failed to load users.');
+    } finally {
+      setConnectionsLoading(false);
     }
   };
 
@@ -454,18 +528,26 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
               </span>
               <span className="text-xs text-alu-text-tertiary">Posts</span>
             </div>
-            <div className="text-center">
+            <button
+              type="button"
+              className={`text-center ${isOwnProfile ? 'hover:opacity-80 transition-opacity' : ''}`}
+              onClick={() => { if (isOwnProfile) openConnections('followers'); }}
+            >
               <span className="text-[18px] font-bold text-alu-text block leading-none">
                 {isOwnProfile ? ownFollowersCount : followersCount}
               </span>
               <span className="text-xs text-alu-text-tertiary">Followers</span>
-            </div>
-            <div className="text-center">
+            </button>
+            <button
+              type="button"
+              className={`text-center ${isOwnProfile ? 'hover:opacity-80 transition-opacity' : ''}`}
+              onClick={() => { if (isOwnProfile) openConnections('following'); }}
+            >
               <span className="text-[18px] font-bold text-alu-text block leading-none">
                 {isOwnProfile ? ownFollowingCount : followingCount}
               </span>
               <span className="text-xs text-alu-text-tertiary">Following</span>
-            </div>
+            </button>
           </div>
         </div>
 
@@ -686,7 +768,10 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
             <p className="text-sm text-alu-text-secondary mb-4">This action cannot be undone.</p>
             <div className="flex gap-2">
               <button
-                onClick={() => setDeletingPost(null)}
+                onClick={() => {
+                  setDeletingPost(null);
+                  setDeleteError('');
+                }}
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors"
               >
                 Cancel
@@ -698,6 +783,71 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
               >
                 {isDeleting ? 'Deleting...' : 'Delete'}
               </button>
+            </div>
+            {deleteError && (
+              <p className="mt-3 text-xs text-red-500">{deleteError}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Followers / Following Modal (own profile only) */}
+      {isOwnProfile && connectionsModal && (
+        <div className="fixed inset-0 z-[210] bg-black/60 flex items-end md:items-center md:justify-center" onClick={() => setConnectionsModal(null)}>
+          <div className="bg-white w-full md:w-[420px] max-h-[70vh] rounded-t-2xl md:rounded-2xl p-3 animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-center pb-2 md:hidden">
+              <div className="w-10 h-1 bg-[#e5e5e5] rounded-full" />
+            </div>
+            <div className="flex items-center justify-between px-2 pb-2 border-b border-[#efefef]">
+              <h3 className="text-base font-bold text-[#262626]">
+                {connectionsModal === 'followers' ? 'Followers' : 'Following'}
+              </h3>
+              <button
+                onClick={() => setConnectionsModal(null)}
+                className="w-8 h-8 rounded-full hover:bg-[#f5f5f5] text-[#666]"
+                aria-label="Close"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="overflow-y-auto max-h-[56vh] py-1">
+              {connectionsLoading && (
+                <p className="px-3 py-4 text-sm text-[#8e8e8e]">Loading...</p>
+              )}
+              {!connectionsLoading && connectionsError && (
+                <p className="px-3 py-4 text-sm text-red-500">{connectionsError}</p>
+              )}
+              {!connectionsLoading && !connectionsError && connectionUsers.length === 0 && (
+                <p className="px-3 py-4 text-sm text-[#8e8e8e]">
+                  {connectionsModal === 'followers' ? 'No followers yet.' : 'Not following anyone yet.'}
+                </p>
+              )}
+              {!connectionsLoading && !connectionsError && connectionUsers.map((u) => (
+                <button
+                  key={u.userId}
+                  onClick={() => {
+                    setConnectionsModal(null);
+                    onViewUser?.(u.userId);
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#fafafa] text-left"
+                >
+                  {u.avatarUrl ? (
+                    <img src={u.avatarUrl} alt="" className="w-10 h-10 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-[#f2f2f2] text-[#8e8e8e] text-sm font-bold flex items-center justify-center">
+                      {(u.displayName || 'U')[0].toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[#262626] truncate">{u.displayName || u.userId}</p>
+                    <p className="text-xs text-[#8e8e8e] truncate">@{u.userId}</p>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
         </div>
