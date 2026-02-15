@@ -7,6 +7,7 @@ import { useState, useEffect, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useUser, useClerk, useAuth } from '@clerk/nextjs';
 import { db, Post } from '../../db';
+import { pullChanges } from '../../syncService';
 import MediaItem from '../MediaItem';
 import { SettingsIcon, ShieldIcon, FileTextIcon, LogOutIcon, MoreVertIcon, ShortsIcon, VideosIcon, HeartIcon, BookmarkIcon } from '../icons';
 import PrivacyPolicy from '../PrivacyPolicy';
@@ -90,6 +91,8 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
   const [ownFollowingCount, setOwnFollowingCount] = useState(0);
   const [ownFollowers, setOwnFollowers] = useState<string[]>([]);
   const [ownFollowing, setOwnFollowing] = useState<string[]>([]);
+  const [isResettingCache, setIsResettingCache] = useState(false);
+  const [cacheResetMessage, setCacheResetMessage] = useState('');
 
   const backendUrl = BACKEND_URL;
 
@@ -476,6 +479,29 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
     }
   };
 
+  const handleResetLocalCache = async () => {
+    if (isResettingCache) return;
+    setIsResettingCache(true);
+    setCacheResetMessage('');
+    try {
+      await db.transaction('rw', [db.posts, db.syncState, db.stories, db.storyNotifications, db.dmThreads, db.dmMessages], async () => {
+        await db.posts.clear();
+        await db.syncState.clear();
+        await db.stories.clear();
+        await db.storyNotifications.clear();
+        await db.dmThreads.clear();
+        await db.dmMessages.clear();
+      });
+
+      await pullChanges();
+      setCacheResetMessage('Local cache reset complete.');
+    } catch {
+      setCacheResetMessage('Could not reset local cache right now.');
+    } finally {
+      setIsResettingCache(false);
+    }
+  };
+
   if (!isOwnProfile && loadingProfile) {
     return (
       <div className="w-full max-w-[600px] mx-auto animate-fade-in">
@@ -635,12 +661,26 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
             Terms & Conditions
           </button>
           <button
+            onClick={handleResetLocalCache}
+            disabled={isResettingCache}
+            className="w-full text-left px-3 py-2.5 text-sm text-alu-text hover:bg-alu-hover rounded-lg transition-colors flex items-center gap-2.5 disabled:opacity-60"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M3 12a9 9 0 1 0 3-6.7" />
+              <polyline points="3 3 3 9 9 9" />
+            </svg>
+            {isResettingCache ? 'Resetting local cache...' : 'Reset Local Cache'}
+          </button>
+          <button
             onClick={() => signOut()}
             className="w-full text-left px-3 py-2.5 text-sm text-alu-danger hover:bg-alu-hover rounded-lg transition-colors flex items-center gap-2.5"
           >
             <LogOutIcon size={18} />
             Log Out
           </button>
+          {cacheResetMessage && (
+            <p className="px-3 pt-1 text-xs text-alu-text-tertiary">{cacheResetMessage}</p>
+          )}
         </div>
       )}
       {/* Overlays (own profile only) */}
