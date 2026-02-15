@@ -1,7 +1,9 @@
 'use client';
 
+import { BACKEND_URL } from '@/app/lib/backend';
 import { useState, useRef } from 'react';
 import { useUser } from '@clerk/nextjs';
+import { useAuth } from '@clerk/nextjs';
 
 interface EditProfileProps {
     onBack: () => void;
@@ -9,6 +11,7 @@ interface EditProfileProps {
 
 export default function EditProfile({ onBack }: EditProfileProps) {
     const { user } = useUser();
+    const { getToken } = useAuth();
     const [displayName, setDisplayName] = useState(user?.firstName || user?.username || '');
     const [bio, setBio] = useState((user?.unsafeMetadata?.bio as string) || '');
     const [isSaving, setIsSaving] = useState(false);
@@ -50,6 +53,18 @@ export default function EditProfile({ onBack }: EditProfileProps) {
             // Update profile image
             if (profileImage) {
                 await user.setProfileImage({ file: profileImage });
+            }
+
+            // Sync latest display/avatar into backend directory for search/feed rendering.
+            try {
+                const token = await getToken();
+                if (token) {
+                    await fetch(`${BACKEND_URL}/users/me/sync`, {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                }
+            } catch {
             }
 
             onBack();

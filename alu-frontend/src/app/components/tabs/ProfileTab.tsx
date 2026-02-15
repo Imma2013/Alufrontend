@@ -396,6 +396,16 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
+      if (res.status === 404) {
+        // Legacy local/cloud mismatch: treat missing remote post as deleted locally.
+        try { await db.posts.delete(deletingPost._id); } catch { /* ok */ }
+        if (!isOwnProfile) {
+          setOtherUserPosts(prev => prev.filter(p => p._id !== deletingPost._id));
+        }
+        setDeletingPost(null);
+        return;
+      }
+
       if (!res.ok) {
         let message = `Delete failed (${res.status})`;
         try {
@@ -853,7 +863,6 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
                   )}
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-[#262626] truncate">{u.displayName || u.userId}</p>
-                    <p className="text-xs text-[#8e8e8e] truncate">@{u.userId}</p>
                   </div>
                 </button>
               ))}
