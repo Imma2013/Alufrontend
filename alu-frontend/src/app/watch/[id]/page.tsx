@@ -464,22 +464,21 @@ export default function WatchPage() {
                 Like {c.likes > 0 ? `(${c.likes})` : ''}
               </button>
 
-              {!isReply && (
-                <button
-                  onClick={() => {
-                    if (activeReplyCommentId === c._id) {
-                      setActiveReplyCommentId(null);
-                      setReplyText('');
-                    } else {
-                      setActiveReplyCommentId(c._id);
-                      setReplyText('');
-                    }
-                  }}
-                  className="text-xs font-semibold text-alu-text-tertiary hover:text-alu-text transition-colors"
-                >
-                  Reply
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  const targetParentId = parentId || c._id;
+                  if (activeReplyCommentId === targetParentId) {
+                    setActiveReplyCommentId(null);
+                    setReplyText('');
+                  } else {
+                    setActiveReplyCommentId(targetParentId);
+                    setReplyText('');
+                  }
+                }}
+                className="text-xs font-semibold text-alu-text-tertiary hover:text-alu-text transition-colors"
+              >
+                Reply
+              </button>
 
               {canDelete && (
                 <button

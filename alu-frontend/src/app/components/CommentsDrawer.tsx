@@ -368,22 +368,24 @@ export default function CommentsDrawer({
                                 )}
                                 <span>{c.likes > 0 ? c.likes : ''}</span>
                             </button>
-                            {!isReply && (
-                                <button
-                                    onClick={() => {
-                                        if (activeReplyCommentId === c._id) {
-                                            setActiveReplyCommentId(null);
-                                            setReplyText('');
-                                        } else {
-                                            setActiveReplyCommentId(c._id);
-                                            setReplyText('');
+                            <button
+                                onClick={() => {
+                                    const targetParentId = parentId || c._id;
+                                    if (activeReplyCommentId === targetParentId) {
+                                        setActiveReplyCommentId(null);
+                                        setReplyText('');
+                                    } else {
+                                        setActiveReplyCommentId(targetParentId);
+                                        setReplyText('');
+                                        if (parentId) {
+                                            setExpandedReplies(prev => new Set(prev).add(parentId));
                                         }
-                                    }}
-                                    className="text-xs font-semibold text-alu-text-tertiary hover:text-alu-text transition-colors"
-                                >
-                                    Reply
-                                </button>
-                            )}
+                                    }
+                                }}
+                                className="text-xs font-semibold text-alu-text-tertiary hover:text-alu-text transition-colors"
+                            >
+                                Reply
+                            </button>
                             {(c.userId === user?.id || canModerate) && (
                                 <button
                                     onClick={() => handleDelete(c._id, isReply, parentId)}

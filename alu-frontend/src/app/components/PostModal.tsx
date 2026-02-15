@@ -487,14 +487,18 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
               >
                 {c.likes > 0 ? `${c.likes} ${c.likes === 1 ? 'like' : 'likes'}` : 'Like'}
               </button>
-              {!isReply && (
-                <button
-                  onClick={() => setReplyingTo(c)}
-                  className="text-xs font-semibold text-[#8e8e8e] hover:text-[#262626] transition-colors"
-                >
-                  Reply
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  const targetParentId = parentId || c._id;
+                  const targetParent = comments.find((item) => item._id === targetParentId) || c;
+                  setReplyingTo(targetParent);
+                  setExpandedReplies((prev) => new Set(prev).add(targetParentId));
+                  commentInputRef.current?.focus();
+                }}
+                className="text-xs font-semibold text-[#8e8e8e] hover:text-[#262626] transition-colors"
+              >
+                Reply
+              </button>
               {(c.userId === user?.id || isOwner) && (
                 <button
                   onClick={() => deleteComment(c._id, isReply, parentId)}
