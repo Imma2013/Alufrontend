@@ -245,6 +245,10 @@ export default function App() {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
         });
+        await fetch(`${backendUrl}/users/me/reconcile`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
       } catch {
       }
     };
