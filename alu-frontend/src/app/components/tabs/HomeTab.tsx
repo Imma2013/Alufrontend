@@ -41,6 +41,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
   const [openCommentsOnModal, setOpenCommentsOnModal] = useState(false);
   const [peopleResults, setPeopleResults] = useState<UserResult[]>([]);
   const [isSearchingPeople, setIsSearchingPeople] = useState(false);
+  const [feedActionError, setFeedActionError] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const allPosts = useLiveQuery(
@@ -191,11 +192,18 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
     if (!token) return;
     const backendUrl = BACKEND_URL;
     try {
+      setFeedActionError('');
       const res = await fetch(`${backendUrl}/posts/${postId}/like`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ displayName: user?.fullName || '', avatarUrl: user?.imageUrl || '' }),
       });
+      if (res.status === 404) {
+        try { await db.posts.delete(postId); } catch { /* ok */ }
+        await pullChanges();
+        setFeedActionError('This post is no longer available. Feed refreshed.');
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         setLikedPosts((prev) => ({ ...prev, [postId]: data.likes }));
@@ -208,14 +216,19 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
           }
           return next;
         });
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setFeedActionError(data?.error || 'Could not like this post right now.');
       }
     } catch (err) {
       console.error('Like failed:', err);
+      setFeedActionError('Could not like this post right now.');
     }
   };
 
   const toggleSave = async (postId: string) => {
     try {
+      setFeedActionError('');
       const token = await getToken();
       if (!token || !user) return;
 
@@ -246,9 +259,17 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
             ? [...((await db.posts.get(postId))?.savedBy || []), user.id]
             : ((await db.posts.get(postId))?.savedBy || []).filter((id) => id !== user.id),
         });
+      } else if (res.status === 404) {
+        try { await db.posts.delete(postId); } catch { /* ok */ }
+        await pullChanges();
+        setFeedActionError('This post is no longer available. Feed refreshed.');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setFeedActionError(data?.error || 'Could not save this post right now.');
       }
     } catch (err) {
       console.error('Save failed:', err);
+      setFeedActionError('Could not save this post right now.');
     }
   };
 
@@ -310,6 +331,9 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
         <div className="text-center py-2">
           <span className="text-[11px] text-alu-text-tertiary animate-pulse">Syncing...</span>
         </div>
+      )}
+      {feedActionError && (
+        <div className="px-4 py-2 text-xs text-red-500 border-b border-alu-border bg-white">{feedActionError}</div>
       )}
 
       <div className="px-3 py-2 border-b border-alu-border bg-white flex items-center gap-4">

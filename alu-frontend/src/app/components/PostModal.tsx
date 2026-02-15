@@ -56,6 +56,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showOwnerOptions, setShowOwnerOptions] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [actionError, setActionError] = useState('');
   const [mediaLoaded, setMediaLoaded] = useState(false);
   const [mounted, setMounted] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement>(null);
@@ -142,6 +143,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
     const token = await getToken();
     if (!token) return;
     try {
+      setActionError('');
       const res = await fetch(`${backendUrl}/posts/${post._id}/like`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -151,9 +153,13 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
         const data = await res.json();
         setLikeCount(data.likes);
         setLikedByMe(data.liked);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setActionError(data?.error || 'Could not like this post right now.');
       }
     } catch (err) {
       console.error('Like failed:', err);
+      setActionError('Could not like this post right now.');
     }
   };
 
@@ -248,6 +254,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
 
     setSubmittingComment(true);
     try {
+      setActionError('');
       let imageUrl = '';
       if (imageFile) {
         setUploadingImage(true);
@@ -283,6 +290,9 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
         setImageFile(null);
         setImagePreview(null);
         setReplyingTo(null);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setActionError(data?.error || 'Could not post comment right now.');
       }
     } finally {
       setSubmittingComment(false);
@@ -658,6 +668,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
           <div className="px-4 pb-2.5">
             <p className="text-[13px] font-semibold text-[#262626]">{likeCount.toLocaleString()} likes</p>
             <p className="text-[11px] text-[#8e8e8e] mt-0.5 uppercase tracking-[0.2px]">{new Date(post.timestamp).toLocaleDateString()}</p>
+            {actionError && <p className="text-[11px] text-red-500 mt-1">{actionError}</p>}
           </div>
 
           <div className="border-t border-[#efefef] px-4 py-2.5 shrink-0">
