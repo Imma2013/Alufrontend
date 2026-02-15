@@ -84,16 +84,18 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
   const handleTapVideo = () => {
     const container = videoContainerRef.current;
     if (!container) return;
-    const video = container.querySelector('video');
-    if (video) {
-      if (video.paused) {
-        video.play();
-        setIsPaused(false);
-      } else {
-        video.pause();
-        setIsPaused(true);
-      }
+    const videos = Array.from(container.querySelectorAll('video'));
+    if (videos.length === 0) return;
+    const shouldPlay = videos.every((v) => v.paused);
+    if (shouldPlay) {
+      videos.forEach((v) => {
+        void v.play().catch(() => {});
+      });
+      setIsPaused(false);
+      return;
     }
+    videos.forEach((v) => v.pause());
+    setIsPaused(true);
   };
 
   const allShorts = useLiveQuery(
