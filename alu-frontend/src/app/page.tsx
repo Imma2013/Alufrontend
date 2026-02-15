@@ -235,6 +235,24 @@ export default function App() {
   }, [getToken]);
 
   useEffect(() => {
+    const syncSignedInUser = async () => {
+      try {
+        if (!isSignedIn) return;
+        const token = await getToken();
+        if (!token) return;
+        const backendUrl = BACKEND_URL;
+        await fetch(`${backendUrl}/users/me/sync`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch {
+      }
+    };
+
+    syncSignedInUser();
+  }, [getToken, isSignedIn]);
+
+  useEffect(() => {
     let stopped = false;
     const controller = new AbortController();
 
@@ -746,6 +764,7 @@ export default function App() {
             <MessagesTab
               launchRequest={dmLaunchRequest}
               onLaunchHandled={() => setDmLaunchRequest(null)}
+              onViewUser={handleViewUser}
             />
           )}
         </div>

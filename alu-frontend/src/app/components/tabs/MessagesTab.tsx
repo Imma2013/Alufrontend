@@ -18,6 +18,7 @@ interface UserResult {
 interface MessagesTabProps {
   launchRequest?: { user: UserResult; requestId: number } | null;
   onLaunchHandled?: () => void;
+  onViewUser?: (userId: string) => void;
 }
 
 const formatThreadTime = (date: Date) => {
@@ -36,7 +37,7 @@ const formatThreadTime = (date: Date) => {
 const humanTime = (date: Date) =>
   new Date(date).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-export default function MessagesTab({ launchRequest, onLaunchHandled }: MessagesTabProps) {
+export default function MessagesTab({ launchRequest, onLaunchHandled, onViewUser }: MessagesTabProps) {
   const { getToken } = useAuth();
   const { user } = useUser();
   const myUserId = user?.id || '';
@@ -569,17 +570,23 @@ export default function MessagesTab({ launchRequest, onLaunchHandled }: Messages
                   </svg>
                 </button>
               )}
-              {activeThread.participantAvatar ? (
-                <img src={activeThread.participantAvatar} alt="" className="w-8 h-8 rounded-full object-cover" />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-[#f2f2f2] text-[#8e8e8e] text-xs font-bold flex items-center justify-center">
-                  {(activeThread.participantName || 'U')[0].toUpperCase()}
+              <button
+                onClick={() => activeThread.participantId && onViewUser?.(activeThread.participantId)}
+                className="flex items-center gap-3 text-left"
+                title="Open profile"
+              >
+                {activeThread.participantAvatar ? (
+                  <img src={activeThread.participantAvatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-[#f2f2f2] text-[#8e8e8e] text-xs font-bold flex items-center justify-center">
+                    {(activeThread.participantName || 'U')[0].toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm font-semibold text-[#262626] hover:underline">{activeThread.participantName}</p>
+                  <p className="text-xs text-[#8e8e8e]">Active now</p>
                 </div>
-              )}
-              <div>
-                <p className="text-sm font-semibold text-[#262626]">{activeThread.participantName}</p>
-                <p className="text-xs text-[#8e8e8e]">Active now</p>
-              </div>
+              </button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-4 bg-white">
