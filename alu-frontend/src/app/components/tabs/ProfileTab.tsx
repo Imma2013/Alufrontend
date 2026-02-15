@@ -661,6 +661,8 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
             } catch { /* silent */ }
           }}
           onDelete={() => { setDeletingPost(menuPost); setMenuPost(null); }}
+          allowEdit={menuPost.userId === userId}
+          allowDelete={menuPost.userId === userId}
         />
       )}
 

@@ -8,9 +8,19 @@ interface PostOptionsMenuProps {
   onEdit: () => void;
   onCopyLink: () => void;
   onDelete: () => void;
+  allowEdit?: boolean;
+  allowDelete?: boolean;
 }
 
-export default function PostOptionsMenu({ post, onClose, onEdit, onCopyLink, onDelete }: PostOptionsMenuProps) {
+export default function PostOptionsMenu({
+  post,
+  onClose,
+  onEdit,
+  onCopyLink,
+  onDelete,
+  allowEdit = true,
+  allowDelete = true,
+}: PostOptionsMenuProps) {
   const handleEdit = () => {
     onEdit();
     onClose();
@@ -42,15 +52,17 @@ export default function PostOptionsMenu({ post, onClose, onEdit, onCopyLink, onD
 
         {/* Options */}
         <div className="flex flex-col gap-2">
-          <button
-            onClick={handleEdit}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-alu-surface transition-colors text-left"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-            </svg>
-            <span className="text-sm font-medium text-alu-text">Edit caption</span>
-          </button>
+          {allowEdit && (
+            <button
+              onClick={handleEdit}
+              className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-alu-surface transition-colors text-left"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+              </svg>
+              <span className="text-sm font-medium text-alu-text">Edit caption</span>
+            </button>
+          )}
 
           <button
             onClick={handleCopyLink}
@@ -63,16 +75,18 @@ export default function PostOptionsMenu({ post, onClose, onEdit, onCopyLink, onD
             <span className="text-sm font-medium text-alu-text">Copy link</span>
           </button>
 
-          <button
-            onClick={handleDelete}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-red-50 transition-colors text-left"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            </svg>
-            <span className="text-sm font-medium text-red-500">Delete</span>
-          </button>
+          {allowDelete && (
+            <button
+              onClick={handleDelete}
+              className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-red-50 transition-colors text-left"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              <span className="text-sm font-medium text-red-500">Delete</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
