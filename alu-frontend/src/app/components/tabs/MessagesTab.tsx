@@ -267,17 +267,7 @@ export default function MessagesTab({ launchRequest, onLaunchHandled, onViewUser
   const openThread = useCallback(async (threadId: string) => {
     setActiveThreadId(threadId);
     await db.dmThreads.update(threadId, { unreadCount: 0 });
-    try {
-      const token = await getToken();
-      if (token) {
-        await fetch(`${backendUrl}/dm/threads/${threadId}/read`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      }
-    } catch {
-    }
-  }, [backendUrl, getToken]);
+  }, []);
 
   const startThreadWithUser = useCallback(async (person: UserResult) => {
     if (!myUserId) return;
@@ -584,7 +574,7 @@ export default function MessagesTab({ launchRequest, onLaunchHandled, onViewUser
                 )}
                 <div>
                   <p className="text-sm font-semibold text-[#262626] hover:underline">{activeThread.participantName}</p>
-                  <p className="text-xs text-[#8e8e8e]">Active now</p>
+                  <p className="text-xs text-[#8e8e8e]">Messages</p>
                 </div>
               </button>
             </div>

@@ -153,6 +153,14 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
         const data = await res.json();
         setLikeCount(data.likes);
         setLikedByMe(data.liked);
+        const current = await db.posts.get(post._id);
+        if (current) {
+          const myUserId = user?.id || '';
+          const nextLikedBy = data.liked
+            ? Array.from(new Set([...(current.likedBy || []), myUserId].filter(Boolean)))
+            : (current.likedBy || []).filter((id) => id !== myUserId);
+          await db.posts.update(post._id, { likes: Number(data.likes || 0), likedBy: nextLikedBy });
+        }
       } else {
         const data = await res.json().catch(() => ({}));
         setActionError(data?.error || 'Could not like this post right now.');

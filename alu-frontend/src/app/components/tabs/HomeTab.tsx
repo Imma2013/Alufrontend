@@ -216,6 +216,13 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
           }
           return next;
         });
+        const current = await db.posts.get(postId);
+        if (current) {
+          const nextLikedBy = data.liked
+            ? Array.from(new Set([...(current.likedBy || []), user?.id || ''].filter(Boolean)))
+            : (current.likedBy || []).filter((id) => id !== (user?.id || ''));
+          await db.posts.update(postId, { likes: Number(data.likes || 0), likedBy: nextLikedBy });
+        }
       } else {
         const data = await res.json().catch(() => ({}));
         setFeedActionError(data?.error || 'Could not like this post right now.');
