@@ -10,6 +10,7 @@ interface MediaItemProps {
   videoControls?: boolean;
   autoPlayVideo?: boolean;
   videoObjectFit?: 'cover' | 'contain';
+  mutedVideo?: boolean;
 }
 
 export default function MediaItem({
@@ -17,6 +18,7 @@ export default function MediaItem({
   videoControls = true,
   autoPlayVideo = false,
   videoObjectFit = 'cover',
+  mutedVideo = false,
 }: MediaItemProps) {
   const [localUrl, setLocalUrl] = useState<string | null>(null);
   const [isRemote, setIsRemote] = useState(false);
@@ -77,6 +79,7 @@ export default function MediaItem({
           controls={videoControls}
           autoPlay={autoPlayVideo}
           loop={autoPlayVideo}
+          muted={mutedVideo}
           playsInline
           className={`${videoObjectFit === 'contain' ? 'object-contain' : 'object-cover'} w-full h-full`}
         />
