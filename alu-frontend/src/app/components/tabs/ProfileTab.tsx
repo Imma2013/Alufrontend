@@ -46,6 +46,18 @@ interface LookupUser {
   bio: string;
 }
 
+function normalizeAvatarUrl(raw?: string | null): string {
+  const value = String(raw || '').trim();
+  if (!value) return '';
+  try {
+    const parsed = new URL(value, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.toString();
+    return '';
+  } catch {
+    return '';
+  }
+}
+
 export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUser }: ProfileTabProps) {
   const { user } = useUser();
   const { signOut } = useClerk();
@@ -71,6 +83,9 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
   const [connectionsLoading, setConnectionsLoading] = useState(false);
   const [connectionsError, setConnectionsError] = useState('');
   const [connectionUsers, setConnectionUsers] = useState<LookupUser[]>([]);
+  const [profileAvatarBroken, setProfileAvatarBroken] = useState(false);
+  const [ownAvatarBroken, setOwnAvatarBroken] = useState(false);
+  const [connectionBrokenAvatars, setConnectionBrokenAvatars] = useState<Record<string, boolean>>({});
 
   // Other user state
   const [otherUser, setOtherUser] = useState<OtherUserProfile | null>(null);
@@ -335,6 +350,20 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
   const otherDisplayName = otherUser?.displayName || 'User';
   const otherAvatarLetter = otherDisplayName[0]?.toUpperCase() || 'U';
   const otherBio = otherUser?.bio || '';
+  const ownAvatarUrl = normalizeAvatarUrl(user?.imageUrl || '');
+  const otherAvatarUrl = normalizeAvatarUrl(otherUser?.avatarUrl || '');
+
+  useEffect(() => {
+    setProfileAvatarBroken(false);
+  }, [viewUserId, otherUser?.avatarUrl]);
+
+  useEffect(() => {
+    setOwnAvatarBroken(false);
+  }, [user?.imageUrl]);
+
+  useEffect(() => {
+    setConnectionBrokenAvatars({});
+  }, [connectionsModal, connectionUsers]);
 
   const handleShareProfile = async () => {
     const profileUrl = `${getAppBaseUrl()}/profile/${isOwnProfile ? (user?.id || '') : (viewUserId || '')}`;
@@ -550,14 +579,24 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
         <div className="flex items-center gap-5">
           <div className="w-20 h-20 rounded-full bg-alu-surface flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-alu-border">
             {isOwnProfile ? (
-              user?.imageUrl ? (
-                <img src={user.imageUrl} alt={ownDisplayName} className="w-full h-full object-cover" />
+              ownAvatarUrl && !ownAvatarBroken ? (
+                <img
+                  src={ownAvatarUrl}
+                  alt={ownDisplayName}
+                  className="w-full h-full object-cover"
+                  onError={() => setOwnAvatarBroken(true)}
+                />
               ) : (
                 <span className="text-2xl font-bold text-alu-text-secondary">{ownAvatarLetter}</span>
               )
             ) : (
-              otherUser?.avatarUrl ? (
-                <img src={otherUser.avatarUrl} alt={otherDisplayName} className="w-full h-full object-cover" />
+              otherAvatarUrl && !profileAvatarBroken ? (
+                <img
+                  src={otherAvatarUrl}
+                  alt={otherDisplayName}
+                  className="w-full h-full object-cover"
+                  onError={() => setProfileAvatarBroken(true)}
+                />
               ) : (
                 <span className="text-2xl font-bold text-alu-text-secondary">{otherAvatarLetter}</span>
               )
@@ -894,8 +933,13 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
                   }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#fafafa] text-left"
                 >
-                  {u.avatarUrl ? (
-                    <img src={u.avatarUrl} alt="" className="w-10 h-10 rounded-full object-cover" />
+                  {normalizeAvatarUrl(u.avatarUrl) && !connectionBrokenAvatars[u.userId] ? (
+                    <img
+                      src={normalizeAvatarUrl(u.avatarUrl)}
+                      alt=""
+                      className="w-10 h-10 rounded-full object-cover"
+                      onError={() => setConnectionBrokenAvatars((prev) => ({ ...prev, [u.userId]: true }))}
+                    />
                   ) : (
                     <div className="w-10 h-10 rounded-full bg-[#f2f2f2] text-[#8e8e8e] text-sm font-bold flex items-center justify-center">
                       {(u.displayName || 'U')[0].toUpperCase()}
