@@ -28,6 +28,7 @@ import MessagesTab from './components/tabs/MessagesTab';
 type Tab = 'home' | 'shorts' | 'videos' | 'create' | 'profile' | 'notifications' | 'messages';
 
 const TABS_WITH_HEADER: Tab[] = ['home', 'shorts', 'videos'];
+const AUTH_REQUIRED_TABS: Tab[] = ['create', 'profile', 'notifications', 'messages'];
 const SEARCH_STOPWORDS = new Set([
   'the', 'and', 'for', 'with', 'this', 'that', 'from', 'your', 'you', 'are', 'was', 'were',
   'have', 'has', 'had', 'not', 'but', 'all', 'new', 'now', 'out', 'just', 'into', 'about',
@@ -43,6 +44,27 @@ interface SearchUserSuggestion {
 interface DMLaunchRequest {
   user: SearchUserSuggestion & { bio: string };
   requestId: number;
+}
+
+function AuthRequiredCard({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="max-w-[520px] mx-auto px-4 py-10">
+      <div className="rounded-2xl border border-alu-border bg-white p-6 shadow-[var(--alu-shadow-sm)] text-center">
+        <h3 className="text-xl font-bold text-alu-text">{title}</h3>
+        <p className="text-sm text-alu-text-secondary mt-2">{subtitle}</p>
+        <div className="mt-5">
+          <SignInButton mode="modal">
+            <button
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white"
+              style={{ background: 'linear-gradient(135deg, var(--alu-primary), var(--alu-primary-light))' }}
+            >
+              Sign In
+            </button>
+          </SignInButton>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function BrandWordmark({ small = false }: { small?: boolean }) {
@@ -388,28 +410,8 @@ export default function App() {
     (homeSuggestionLoading || homeKeywordSuggestions.length > 0 || homePeopleSuggestions.length > 0);
   const preferProfileResults = isNameLikeQuery(homeSearchInput);
 
-  // Sign-in screen for logged-out users
-  if (isLoaded && !isSignedIn) {
-    return (
-      <div className="min-h-screen bg-[var(--alu-bg)] flex items-center justify-center">
-        <div className="text-center px-6 max-w-sm mx-auto animate-fade-in">
-          <div className="flex justify-center mb-6">
-            <BrandWordmark />
-          </div>
-          <h1 className="text-2xl font-bold text-alu-text mb-2">Welcome to alu</h1>
-          <SignInButton mode="modal">
-            <button
-              className="w-full py-3.5 rounded-xl font-bold text-white text-sm transition-all duration-200 hover:opacity-90 active:scale-[0.98]"
-              style={{ background: 'linear-gradient(135deg, var(--alu-primary), var(--alu-primary-light))' }}
-            >
-              Sign In
-            </button>
-          </SignInButton>
-          <p className="text-xs text-alu-text-tertiary mt-4">Create, share, and discover AI-powered content</p>
-        </div>
-      </div>
-    );
-  }
+  const isGuest = isLoaded && !isSignedIn;
+  const activeTabNeedsAuth = AUTH_REQUIRED_TABS.includes(activeTab);
 
   const toggleAI = () => {
     // Don't allow both off — if turning AI off, Normal must stay on
@@ -672,12 +674,23 @@ export default function App() {
 
         {/* User at bottom */}
         <div className="p-4 border-t border-[var(--alu-border)]">
-          <div className="flex items-center gap-3">
-            <UserButton afterSignOutUrl="/" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-[var(--alu-text)] truncate">Your Account</p>
+          {isSignedIn ? (
+            <div className="flex items-center gap-3">
+              <UserButton afterSignOutUrl="/" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-[var(--alu-text)] truncate">Your Account</p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <SignInButton mode="modal">
+              <button
+                className="w-full py-2.5 rounded-xl text-sm font-semibold text-white"
+                style={{ background: 'linear-gradient(135deg, var(--alu-primary), var(--alu-primary-light))' }}
+              >
+                Sign In
+              </button>
+            </SignInButton>
+          )}
         </div>
       </aside>
 
@@ -751,24 +764,33 @@ export default function App() {
 
         {/* Tab Content */}
         <div className="w-full">
-          {activeTab === 'home' && <HomeTab showAI={showAI} showNormal={showNormal} searchQuery={homeSearchQuery} onViewUser={handleViewUser} />}
-          {activeTab === 'shorts' && <ShortsTab searchQuery={shortsSearchQuery} onViewUser={handleViewUser} />}
-          {activeTab === 'videos' && <VideosTab searchQuery={videosSearchQuery} showAI={showAI} showNormal={showNormal} />}
-          {activeTab === 'create' && <CreateTab />}
-          {activeTab === 'profile' && (
-            <ProfileTab
-              viewUserId={viewUserId}
-              onBack={() => setViewUserId(null)}
-              onViewUser={handleViewUser}
-              onMessageUser={handleMessageUser}
-            />
-          )}
-          {activeTab === 'notifications' && <NotificationsTab onReadAll={() => setUnreadNotifications(0)} onViewUser={handleViewUser} />}
-          {activeTab === 'messages' && (
-            <MessagesTab
-              launchRequest={dmLaunchRequest}
-              onLaunchHandled={() => setDmLaunchRequest(null)}
-              onViewUser={handleViewUser}
+          {!isGuest || !activeTabNeedsAuth ? (
+            <>
+              {activeTab === 'home' && <HomeTab showAI={showAI} showNormal={showNormal} searchQuery={homeSearchQuery} onViewUser={handleViewUser} />}
+              {activeTab === 'shorts' && <ShortsTab searchQuery={shortsSearchQuery} onViewUser={handleViewUser} />}
+              {activeTab === 'videos' && <VideosTab searchQuery={videosSearchQuery} showAI={showAI} showNormal={showNormal} />}
+              {activeTab === 'create' && <CreateTab />}
+              {activeTab === 'profile' && (
+                <ProfileTab
+                  viewUserId={viewUserId}
+                  onBack={() => setViewUserId(null)}
+                  onViewUser={handleViewUser}
+                  onMessageUser={handleMessageUser}
+                />
+              )}
+              {activeTab === 'notifications' && <NotificationsTab onReadAll={() => setUnreadNotifications(0)} onViewUser={handleViewUser} />}
+              {activeTab === 'messages' && (
+                <MessagesTab
+                  launchRequest={dmLaunchRequest}
+                  onLaunchHandled={() => setDmLaunchRequest(null)}
+                  onViewUser={handleViewUser}
+                />
+              )}
+            </>
+          ) : (
+            <AuthRequiredCard
+              title="Sign in required"
+              subtitle="You can browse content without signing in, but creating and social actions need an account."
             />
           )}
         </div>

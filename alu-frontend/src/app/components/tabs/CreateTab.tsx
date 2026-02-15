@@ -386,12 +386,17 @@ export default function CreateTab() {
         let complete = false;
         while (!complete) {
           await new Promise(resolve => setTimeout(resolve, 3000));
+          const pollToken = await getToken({ skipCache: true });
+          if (!pollToken) {
+            throw new Error('Session expired while checking short status. Please sign in again.');
+          }
           const statusRes = await fetch(`${backendUrl}/generate/status/${jobId}`, {
-            headers: { 'Authorization': `Bearer ${token}` },
+            headers: { 'Authorization': `Bearer ${pollToken}` },
           });
 
           if (!statusRes.ok) {
-            throw new Error('Failed to check generation status');
+            const statusErr = await parseErrorResponse(statusRes, 'Failed to check generation status');
+            throw new Error(statusErr);
           }
 
           const status = await statusRes.json();

@@ -141,7 +141,10 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
 
   const toggleLike = async () => {
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      setActionError('Sign in to like posts.');
+      return;
+    }
     try {
       setActionError('');
       const res = await fetch(`${backendUrl}/posts/${post._id}/like`, {
@@ -232,7 +235,10 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
 
   const toggleSave = async () => {
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      setActionError('Sign in to save posts.');
+      return;
+    }
     try {
       const res = await fetch(`${backendUrl}/posts/${post._id}/favorite`, {
         method: 'POST',
@@ -258,7 +264,10 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
   const submitComment = async () => {
     if ((!commentText.trim() && !imageFile) || submittingComment) return;
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      setActionError('Sign in to comment.');
+      return;
+    }
 
     setSubmittingComment(true);
     try {
@@ -310,7 +319,10 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
 
   const handleCommentLike = async (commentId: string, isReply: boolean = false, parentId?: string) => {
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      setActionError('Sign in to like comments.');
+      return;
+    }
 
     try {
       const res = await fetch(`${backendUrl}/posts/${post._id}/comments/${commentId}/like`, {
@@ -369,7 +381,10 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
 
   const deleteComment = async (commentId: string, isReply: boolean = false, parentId?: string) => {
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      setActionError('Sign in to delete comments.');
+      return;
+    }
 
     const res = await fetch(`${backendUrl}/posts/${post._id}/comments/${commentId}`, {
       method: 'DELETE',

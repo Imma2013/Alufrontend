@@ -189,7 +189,10 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
 
   const toggleLike = async (postId: string) => {
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      setFeedActionError('Sign in to like posts.');
+      return;
+    }
     const backendUrl = BACKEND_URL;
     try {
       setFeedActionError('');
@@ -237,7 +240,10 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
     try {
       setFeedActionError('');
       const token = await getToken();
-      if (!token || !user) return;
+      if (!token || !user) {
+        setFeedActionError('Sign in to save posts.');
+        return;
+      }
 
       const backendUrl = BACKEND_URL;
       const res = await fetch(`${backendUrl}/posts/${postId}/favorite`, {
