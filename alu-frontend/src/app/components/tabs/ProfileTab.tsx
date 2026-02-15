@@ -299,10 +299,19 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
         ? favoritePosts
         : userPosts;
 
+  const looksLikeVideoUrl = (url: string) => /\.(mp4|mov|webm|m4v)(\?|$)/i.test(String(url || ''));
+  const isVideoPost = (p: Post) =>
+    p.mediaType === 'video' ||
+    p.videoType === 'short' ||
+    p.videoType === 'long' ||
+    looksLikeVideoUrl(p.contentUrl || '');
+  const isLongVideoPost = (p: Post) => isVideoPost(p) && p.videoType === 'long';
+  const isShortVideoPost = (p: Post) => isVideoPost(p) && p.videoType !== 'long';
+
   const tabFiltered = sourcePostsForTab.filter((p: Post) => {
-    if (activeContentTab === 'posts') return p.mediaType === 'image';
-    if (activeContentTab === 'shorts') return p.mediaType === 'video' && (!p.videoType || p.videoType === 'short');
-    if (activeContentTab === 'videos') return p.mediaType === 'video' && p.videoType === 'long';
+    if (activeContentTab === 'posts') return !isVideoPost(p);
+    if (activeContentTab === 'shorts') return isShortVideoPost(p);
+    if (activeContentTab === 'videos') return isLongVideoPost(p);
     if (activeContentTab === 'likes') return true;
     if (activeContentTab === 'favorites') return true; // Show all favorited content
     return true;
