@@ -106,6 +106,12 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
     ? shorts.filter((p) => !!p.userId && followingIds.has(p.userId))
     : shorts;
   const short = shortsList[currentIndex];
+  const avatarFallbackByUser = shortsList.reduce<Record<string, string>>((acc, item) => {
+    const uid = String(item.userId || '').trim();
+    const avatar = String(item.avatarUrl || '').trim();
+    if (uid && avatar && !acc[uid]) acc[uid] = avatar;
+    return acc;
+  }, {});
 
   useEffect(() => {
     setCurrentIndex(0);
@@ -360,7 +366,10 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
   const visibleCaption = isCaptionLong && !isCaptionExpanded ? `${rawCaption.slice(0, MAX_CAPTION_CHARS).trimEnd()}...` : rawCaption;
   const isFollowingCreator = !!short.userId && followingIds.has(short.userId);
   const isOwnShort = short.userId === user?.id;
-  const creatorAvatar = short.avatarUrl || (short.userId ? creatorAvatarByUser[short.userId] : '') || '';
+  const creatorAvatar = String(short.avatarUrl || '').trim()
+    || (short.userId ? String(creatorAvatarByUser[short.userId] || '').trim() : '')
+    || (short.userId ? String(avatarFallbackByUser[short.userId] || '').trim() : '')
+    || '';
 
   return (
     <div className="w-full h-full min-h-[70vh] flex items-center justify-center animate-fade-in bg-black select-none" onWheel={handleWheel}>
