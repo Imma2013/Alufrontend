@@ -16,6 +16,10 @@ export function getPostShareUrl(postId: string) {
   return `${getAppBaseUrl()}/post/${postId}`;
 }
 
+export function getProfileShareUrl(userId: string) {
+  return `${getAppBaseUrl()}/profile/${userId}`;
+}
+
 export function getWatchShareUrl(postId: string) {
   return `${getAppBaseUrl()}/watch/${postId}`;
 }

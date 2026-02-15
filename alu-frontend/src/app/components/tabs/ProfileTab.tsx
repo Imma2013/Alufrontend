@@ -1,7 +1,7 @@
 'use client';
 
 import { BACKEND_URL } from '@/app/lib/backend';
-import { getAppBaseUrl, getPostShareUrl } from '@/app/lib/publicUrl';
+import { getPostShareUrl, getProfileShareUrl } from '@/app/lib/publicUrl';
 
 import { useState, useEffect, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -366,11 +366,19 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
   }, [connectionsModal, connectionUsers]);
 
   const handleShareProfile = async () => {
-    const profileUrl = `${getAppBaseUrl()}/profile/${isOwnProfile ? (user?.id || '') : (viewUserId || '')}`;
+    const targetUserId = isOwnProfile ? (user?.id || '') : (viewUserId || '');
+    if (!targetUserId) return;
+    const profileUrl = getProfileShareUrl(targetUserId);
     try {
-      await navigator.clipboard.writeText(profileUrl);
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2000);
+      if (navigator.share) {
+        await navigator.share({
+          title: 'Check out this profile on Alu',
+          text: 'View this profile on Alu',
+          url: profileUrl,
+        });
+      } else {
+        await navigator.clipboard.writeText(profileUrl);
+      }
     } catch {
       const textarea = document.createElement('textarea');
       textarea.value = profileUrl;
@@ -378,9 +386,9 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
       textarea.select();
       document.execCommand('copy');
       document.body.removeChild(textarea);
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2000);
     }
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const handleFollow = async () => {

@@ -61,10 +61,21 @@ export default function VideosTab({
   const [feedMode, setFeedMode] = useState<FeedMode>('for-you');
   const [followingUserIds, setFollowingUserIds] = useState<string[]>([]);
   const [creatorAvatarByUser, setCreatorAvatarByUser] = useState<Record<string, string>>({});
+  const [brokenCreatorAvatars, setBrokenCreatorAvatars] = useState<Record<string, boolean>>({});
   const [followingBusyUserId, setFollowingBusyUserId] = useState<string | null>(null);
   const [durationMap, setDurationMap] = useState<Record<string, string>>({});
   const [hoveredVideoId, setHoveredVideoId] = useState<string | null>(null);
   const [previewSrcMap, setPreviewSrcMap] = useState<Record<string, string>>({});
+  const normalizeAvatarUrl = (raw?: string) => {
+    const value = String(raw || '').trim();
+    if (!value) return '';
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.toString();
+    } catch {
+    }
+    return '';
+  };
 
   const videos = useLiveQuery(
     async () => {
@@ -327,7 +338,8 @@ export default function VideosTab({
             const likes = Number.isFinite(video.likes) ? (video.likes as number) : 0;
             const isOwnVideo = video.userId === user?.id;
             const isFollowingCreator = followingUserIds.includes(video.userId);
-            const creatorAvatar = video.avatarUrl || creatorAvatarByUser[video.userId] || '';
+            const creatorAvatar = normalizeAvatarUrl(video.avatarUrl || creatorAvatarByUser[video.userId] || '');
+            const creatorAvatarKey = `${video.userId || 'anon'}:${video._id}`;
 
             return (
               <button
@@ -383,11 +395,12 @@ export default function VideosTab({
                 </div>
 
                 <div className="flex gap-3 mt-2.5 px-0.5">
-                  {creatorAvatar ? (
+                  {creatorAvatar && !brokenCreatorAvatars[creatorAvatarKey] ? (
                     <img
                       src={creatorAvatar}
                       alt=""
                       className="w-9 h-9 rounded-full object-cover shrink-0 mt-0.5 border border-alu-border"
+                      onError={() => setBrokenCreatorAvatars((prev) => ({ ...prev, [creatorAvatarKey]: true }))}
                     />
                   ) : (
                     <div className="w-9 h-9 rounded-full bg-alu-surface flex items-center justify-center text-xs font-semibold text-alu-text-secondary shrink-0 mt-0.5 border border-alu-border">

@@ -167,9 +167,20 @@ export default function App() {
   const [homePeopleSuggestions, setHomePeopleSuggestions] = useState<SearchUserSuggestion[]>([]);
   const [homeSuggestionOpen, setHomeSuggestionOpen] = useState(false);
   const [homeSuggestionLoading, setHomeSuggestionLoading] = useState(false);
+  const [brokenAvatars, setBrokenAvatars] = useState<Record<string, boolean>>({});
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [dmRealtimeTick, setDmRealtimeTick] = useState(0);
+  const normalizeAvatarUrl = (raw?: string) => {
+    const value = String(raw || '').trim();
+    if (!value) return '';
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.toString();
+    } catch {
+    }
+    return '';
+  };
 
   const homePostsForSuggestions = useLiveQuery(
     () => db.posts.orderBy('timestamp').reverse().limit(300).toArray(),
@@ -477,8 +488,13 @@ export default function App() {
               }}
               className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-alu-hover transition-colors"
             >
-              {person.avatarUrl ? (
-                <img src={person.avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover" />
+              {normalizeAvatarUrl(person.avatarUrl) && !brokenAvatars[`home-suggest:${person.userId}`] ? (
+                <img
+                  src={normalizeAvatarUrl(person.avatarUrl)}
+                  alt=""
+                  className="w-6 h-6 rounded-full object-cover"
+                  onError={() => setBrokenAvatars((prev) => ({ ...prev, [`home-suggest:${person.userId}`]: true }))}
+                />
               ) : (
                 <div className="w-6 h-6 rounded-full bg-alu-surface flex items-center justify-center text-[10px] font-bold text-alu-text-secondary">
                   {(person.displayName || 'U')[0].toUpperCase()}
@@ -511,8 +527,13 @@ export default function App() {
               }}
               className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-alu-hover transition-colors"
             >
-              {person.avatarUrl ? (
-                <img src={person.avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover" />
+              {normalizeAvatarUrl(person.avatarUrl) && !brokenAvatars[`home-suggest:${person.userId}`] ? (
+                <img
+                  src={normalizeAvatarUrl(person.avatarUrl)}
+                  alt=""
+                  className="w-6 h-6 rounded-full object-cover"
+                  onError={() => setBrokenAvatars((prev) => ({ ...prev, [`home-suggest:${person.userId}`]: true }))}
+                />
               ) : (
                 <div className="w-6 h-6 rounded-full bg-alu-surface flex items-center justify-center text-[10px] font-bold text-alu-text-secondary">
                   {(person.displayName || 'U')[0].toUpperCase()}

@@ -53,10 +53,21 @@ export default function MessagesTab({ launchRequest, onLaunchHandled, onViewUser
   const [isMobileView, setIsMobileView] = useState(false);
   const [realtimeTick, setRealtimeTick] = useState(0);
   const [actionError, setActionError] = useState('');
+  const [brokenAvatars, setBrokenAvatars] = useState<Record<string, boolean>>({});
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const backendUrl = BACKEND_URL;
+  const normalizeAvatarUrl = (raw?: string) => {
+    const value = String(raw || '').trim();
+    if (!value) return '';
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.toString();
+    } catch {
+    }
+    return '';
+  };
 
   const threads = useLiveQuery(
     () => (myUserId ? db.dmThreads.where('userId').equals(myUserId).reverse().sortBy('lastMessageAt') : Promise.resolve([] as DMThread[])),
@@ -486,8 +497,13 @@ export default function MessagesTab({ launchRequest, onLaunchHandled, onViewUser
                     onClick={() => startThreadWithUser(person)}
                     className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[#fafafa] transition-colors"
                   >
-                    {person.avatarUrl ? (
-                      <img src={person.avatarUrl} alt="" className="w-11 h-11 rounded-full object-cover" />
+                    {normalizeAvatarUrl(person.avatarUrl) && !brokenAvatars[`search:${person.userId}`] ? (
+                      <img
+                        src={normalizeAvatarUrl(person.avatarUrl)}
+                        alt=""
+                        className="w-11 h-11 rounded-full object-cover"
+                        onError={() => setBrokenAvatars((prev) => ({ ...prev, [`search:${person.userId}`]: true }))}
+                      />
                     ) : (
                       <div className="w-11 h-11 rounded-full bg-[#f2f2f2] text-[#8e8e8e] text-sm font-bold flex items-center justify-center">
                         {(person.displayName || 'U')[0].toUpperCase()}
@@ -516,8 +532,13 @@ export default function MessagesTab({ launchRequest, onLaunchHandled, onViewUser
                     activeThreadId === thread._id ? 'bg-[#fafafa]' : 'hover:bg-[#fafafa]'
                   }`}
                 >
-                  {thread.participantAvatar ? (
-                    <img src={thread.participantAvatar} alt="" className="w-12 h-12 rounded-full object-cover" />
+                  {normalizeAvatarUrl(thread.participantAvatar) && !brokenAvatars[`thread:${thread._id}`] ? (
+                    <img
+                      src={normalizeAvatarUrl(thread.participantAvatar)}
+                      alt=""
+                      className="w-12 h-12 rounded-full object-cover"
+                      onError={() => setBrokenAvatars((prev) => ({ ...prev, [`thread:${thread._id}`]: true }))}
+                    />
                   ) : (
                     <div className="w-12 h-12 rounded-full bg-[#f2f2f2] text-[#8e8e8e] text-sm font-bold flex items-center justify-center">
                       {(thread.participantName || 'U')[0].toUpperCase()}
@@ -565,8 +586,13 @@ export default function MessagesTab({ launchRequest, onLaunchHandled, onViewUser
                 className="flex items-center gap-3 text-left"
                 title="Open profile"
               >
-                {activeThread.participantAvatar ? (
-                  <img src={activeThread.participantAvatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+                {normalizeAvatarUrl(activeThread.participantAvatar) && !brokenAvatars[`active:${activeThread._id}`] ? (
+                  <img
+                    src={normalizeAvatarUrl(activeThread.participantAvatar)}
+                    alt=""
+                    className="w-8 h-8 rounded-full object-cover"
+                    onError={() => setBrokenAvatars((prev) => ({ ...prev, [`active:${activeThread._id}`]: true }))}
+                  />
                 ) : (
                   <div className="w-8 h-8 rounded-full bg-[#f2f2f2] text-[#8e8e8e] text-xs font-bold flex items-center justify-center">
                     {(activeThread.participantName || 'U')[0].toUpperCase()}

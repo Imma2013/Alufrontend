@@ -33,11 +33,22 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
   const [expandedCaptions, setExpandedCaptions] = useState<Set<string>>(new Set());
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [creatorAvatarByUser, setCreatorAvatarByUser] = useState<Record<string, string>>({});
+  const [brokenCreatorAvatars, setBrokenCreatorAvatars] = useState<Record<string, boolean>>({});
   const [followBusyId, setFollowBusyId] = useState<string | null>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
   const touchStartTime = useRef(0);
   const backendUrl = BACKEND_URL;
+  const normalizeAvatarUrl = (raw?: string) => {
+    const value = String(raw || '').trim();
+    if (!value) return '';
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.toString();
+    } catch {
+    }
+    return '';
+  };
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -370,6 +381,8 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
     || (short.userId ? String(creatorAvatarByUser[short.userId] || '').trim() : '')
     || (short.userId ? String(avatarFallbackByUser[short.userId] || '').trim() : '')
     || '';
+  const normalizedCreatorAvatar = normalizeAvatarUrl(creatorAvatar);
+  const creatorAvatarKey = `${short.userId || 'anon'}:${short._id}`;
 
   return (
     <div className="w-full h-full min-h-[70vh] flex items-center justify-center animate-fade-in bg-black select-none" onWheel={handleWheel}>
@@ -431,9 +444,14 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
 
             <div className="absolute bottom-0 left-0 right-16 p-4 pointer-events-none">
               <div className="flex items-center gap-2 mb-2 pointer-events-auto">
-                {creatorAvatar ? (
+                {normalizedCreatorAvatar && !brokenCreatorAvatars[creatorAvatarKey] ? (
                   <button onClick={() => short.userId && onViewUser?.(short.userId)}>
-                    <img src={creatorAvatar} alt="" className="w-8 h-8 rounded-full object-cover border border-white/60" />
+                    <img
+                      src={normalizedCreatorAvatar}
+                      alt=""
+                      className="w-8 h-8 rounded-full object-cover border border-white/60"
+                      onError={() => setBrokenCreatorAvatars((prev) => ({ ...prev, [creatorAvatarKey]: true }))}
+                    />
                   </button>
                 ) : (
                   <button

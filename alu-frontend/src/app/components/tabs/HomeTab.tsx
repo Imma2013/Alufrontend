@@ -42,7 +42,19 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
   const [peopleResults, setPeopleResults] = useState<UserResult[]>([]);
   const [isSearchingPeople, setIsSearchingPeople] = useState(false);
   const [feedActionError, setFeedActionError] = useState('');
+  const [brokenAvatars, setBrokenAvatars] = useState<Record<string, boolean>>({});
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const normalizeAvatarUrl = (raw?: string) => {
+    const value = String(raw || '').trim();
+    if (!value) return '';
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.toString();
+    } catch {
+    }
+    return '';
+  };
 
   const allPosts = useLiveQuery(
     () => db.posts.orderBy('timestamp').reverse().toArray(),
@@ -382,8 +394,13 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                   onClick={() => onViewUser?.(u.userId)}
                   className="flex-shrink-0 flex flex-col items-center gap-1.5 p-3 rounded-xl bg-alu-bg-secondary hover:bg-[var(--alu-hover)] transition-colors w-[100px]"
                 >
-                  {u.avatarUrl ? (
-                    <img src={u.avatarUrl} alt="" className="w-12 h-12 rounded-full object-cover" />
+                  {normalizeAvatarUrl(u.avatarUrl) && !brokenAvatars[`people:${u.userId}`] ? (
+                    <img
+                      src={normalizeAvatarUrl(u.avatarUrl)}
+                      alt=""
+                      className="w-12 h-12 rounded-full object-cover"
+                      onError={() => setBrokenAvatars((prev) => ({ ...prev, [`people:${u.userId}`]: true }))}
+                    />
                   ) : (
                     <div className="w-12 h-12 rounded-full bg-[var(--alu-primary-glow)] flex items-center justify-center text-sm font-bold text-[var(--alu-primary)]">
                       {(u.displayName || 'U')[0].toUpperCase()}
@@ -440,8 +457,13 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
             >
               <div className="flex items-center gap-3 px-4 py-3">
                 <button onClick={() => post.userId && onViewUser?.(post.userId)} className="shrink-0">
-                  {post.avatarUrl ? (
-                    <img src={post.avatarUrl} alt="" className="w-9 h-9 rounded-full object-cover" />
+                  {normalizeAvatarUrl(post.avatarUrl) && !brokenAvatars[`post:${post._id}`] ? (
+                    <img
+                      src={normalizeAvatarUrl(post.avatarUrl)}
+                      alt=""
+                      className="w-9 h-9 rounded-full object-cover"
+                      onError={() => setBrokenAvatars((prev) => ({ ...prev, [`post:${post._id}`]: true }))}
+                    />
                   ) : (
                     <div className="w-9 h-9 rounded-full bg-alu-surface flex items-center justify-center text-sm font-semibold text-alu-text-secondary">
                       {(post.displayName || post.userId || 'U')[0].toUpperCase()}
