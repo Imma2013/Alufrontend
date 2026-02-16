@@ -25,7 +25,7 @@ const SHORT_CREDIT_PACK = {
  * POST /create-checkout-session
  * Creates a Stripe Checkout Session.
  * Body: { priceId, mode }
- *   mode: 'subscription' (Pro monthly), 'payment' (image credits), or 'short' (short credits)
+ *   mode: 'subscription' (Pro monthly) or 'payment' (image credits)
  */
 router.post('/create-checkout-session', clerkAuth, async (req, res) => {
   const userId = req.auth.sub;
@@ -33,6 +33,9 @@ router.post('/create-checkout-session', clerkAuth, async (req, res) => {
 
   if (!priceId) {
     return res.status(400).json({ error: 'Missing priceId' });
+  }
+  if (mode && mode !== 'subscription' && mode !== 'payment') {
+    return res.status(400).json({ error: 'Invalid purchase mode.' });
   }
   if (!String(priceId).startsWith('price_')) {
     return res.status(400).json({ error: 'Invalid Stripe priceId. Use a price_... ID, not a product ID.' });
@@ -42,13 +45,11 @@ router.post('/create-checkout-session', clerkAuth, async (req, res) => {
     return res.status(503).json({ error: 'Payments unavailable: STRIPE_SECRET_KEY is missing on backend.' });
   }
 
-  const purchaseType = mode === 'short'
-    ? 'short_credit'
-    : (mode === 'payment' ? 'image_credit' : 'subscription');
+  const purchaseType = mode === 'payment' ? 'image_credit' : 'subscription';
   const checkoutMode = purchaseType === 'subscription' ? 'subscription' : 'payment';
   const expectedPriceId = purchaseType === 'subscription'
     ? process.env.STRIPE_PRO_PRICE_ID
-    : (purchaseType === 'short_credit' ? process.env.STRIPE_SHORT_PRICE_ID : process.env.STRIPE_IMAGE_PRICE_ID);
+    : process.env.STRIPE_IMAGE_PRICE_ID;
 
   if (expectedPriceId && expectedPriceId !== priceId) {
     return res.status(400).json({ error: 'Invalid priceId for selected purchase mode.' });

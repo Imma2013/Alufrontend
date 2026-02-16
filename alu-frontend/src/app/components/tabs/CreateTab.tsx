@@ -113,7 +113,7 @@ export default function CreateTab() {
     fetchUsage();
   }, [success, getToken, backendUrl]); // re-fetch after successful generation
 
-  const handleUpgrade = async (mode: 'subscription' | 'payment' | 'short') => {
+  const handleUpgrade = async (mode: 'subscription' | 'payment') => {
     const token = await getToken();
     if (!token) return;
     try {
@@ -122,17 +122,14 @@ export default function CreateTab() {
       setUpgradeError(null);
       const proPriceId = process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID;
       const creditPriceId = process.env.NEXT_PUBLIC_STRIPE_CREDIT_PRICE_ID;
-      const shortPriceId = process.env.NEXT_PUBLIC_STRIPE_SHORT_PRICE_ID;
       const priceId = mode === 'subscription'
         ? proPriceId
-        : (mode === 'short' ? shortPriceId : creditPriceId);
+        : creditPriceId;
       if (!priceId) {
         throw new Error(
           mode === 'subscription'
             ? 'Stripe Pro price is not configured.'
-            : (mode === 'short'
-              ? 'Stripe short credit price is not configured.'
-              : 'Stripe credit pack price is not configured.')
+            : 'Stripe credit pack price is not configured.'
         );
       }
       if (!String(priceId).startsWith('price_')) {
@@ -168,7 +165,7 @@ export default function CreateTab() {
 
   const types: { key: ContentType; label: string; desc: string; icon: React.ReactNode }[] = [
     { key: 'image', label: 'Image', desc: mode === 'ai' ? 'AI generated' : 'Manual upload', icon: <ImageIcon size={24} /> },
-    { key: 'short', label: 'Shorts', desc: mode === 'ai' ? 'AI generated' : 'Up to 1 minute', icon: <ZapIcon size={24} /> },
+    { key: 'short', label: 'Shorts', desc: mode === 'ai' ? 'Upload only' : 'Up to 1 minute', icon: <ZapIcon size={24} /> },
     { key: 'video', label: 'Videos', desc: mode === 'ai' ? 'Upload only' : '1 minute and up', icon: <FilmIcon size={24} /> },
   ];
 
@@ -339,8 +336,8 @@ export default function CreateTab() {
 
   const handleAIGenerate = async () => {
     if (!prompt.trim()) return;
-    if (selectedType === 'video') {
-      setError('AI video generation is not enabled in this tab yet. Use Upload for videos.');
+    if (selectedType === 'video' || selectedType === 'short') {
+      setError('AI generation is currently available for images only. Use Upload for shorts and videos.');
       return;
     }
     setIsLoading(true);
@@ -522,12 +519,12 @@ export default function CreateTab() {
           <button
             key={t.key}
             onClick={() => {
-              if (mode === 'ai' && t.key === 'video') return;
+              if (mode === 'ai' && (t.key === 'video' || t.key === 'short')) return;
               setSelectedType(t.key);
               clearFile();
             }}
-            disabled={mode === 'ai' && t.key === 'video'}
-            className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-200 ${mode === 'ai' && t.key === 'video' ? 'opacity-60 cursor-not-allowed' : ''} ${selectedType === t.key
+            disabled={mode === 'ai' && (t.key === 'video' || t.key === 'short')}
+            className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-200 ${mode === 'ai' && (t.key === 'video' || t.key === 'short') ? 'opacity-60 cursor-not-allowed' : ''} ${selectedType === t.key
               ? 'border-[var(--alu-primary)] bg-[var(--alu-primary-glow)]'
               : 'border-alu-border hover:border-alu-text-tertiary bg-white'
               }`}
@@ -553,7 +550,7 @@ export default function CreateTab() {
         <button
           onClick={() => {
             setMode('ai');
-            if (selectedType === 'video') setSelectedType('image');
+            if (selectedType === 'video' || selectedType === 'short') setSelectedType('image');
           }}
           className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${mode === 'ai' ? 'bg-white text-alu-text shadow-sm' : 'text-alu-text-tertiary hover:text-alu-text-secondary'
             }`}
@@ -612,31 +609,6 @@ export default function CreateTab() {
         </div>
       ) : (
         <>
-          {/* Shorts Counter (AI mode, shorts selected) */}
-          {selectedType === 'short' && usage && (
-            <div className="mb-4 p-4 bg-gradient-to-r from-[var(--alu-primary-glow)] to-[var(--alu-surface)] rounded-xl border border-[var(--alu-primary)]/20">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[var(--alu-primary)]">
-                      <ZapIcon size={18} />
-                    </span>
-                    <span className="text-sm font-bold text-alu-text">Shorts Remaining</span>
-                  </div>
-                  <p className="text-xs text-alu-text-secondary">Resets weekly</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-[var(--alu-primary)]">
-                    {usage.remainingShorts}
-                  </div>
-                  <div className="text-xs text-alu-text-tertiary">
-                    of {usage.limits.short}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           <div className="mb-6">
             <textarea
               value={prompt}
@@ -650,11 +622,7 @@ export default function CreateTab() {
             />
             <div className="flex justify-end mt-2">
               <span className="text-[11px] text-alu-text-tertiary">
-                {usage ? (
-                  selectedType === 'image'
-                    ? `${usage.remainingImages} images available`
-                    : `${usage.remainingShorts} shorts available`
-                ) : 'Loading...'}
+                {usage ? `${usage.remainingImages} images available` : 'Loading...'}
                 {' - '}{usage?.isPro ? 'Pro' : 'Free tier'}
               </span>
             </div>
@@ -758,11 +726,8 @@ export default function CreateTab() {
 
       {/* Submit */}
       {(() => {
-        const canGenerateShort = !usage || selectedType !== 'short' || mode !== 'ai' || usage.remainingShorts > 0;
-        const isDisabled = isLoading || (mode === 'ai' && !prompt.trim()) || (mode === 'upload' && files.length === 0) || !canGenerateShort;
-        const tooltipText = !canGenerateShort && selectedType === 'short' && mode === 'ai'
-          ? 'Daily shorts limit reached'
-          : '';
+        const isDisabled = isLoading || (mode === 'ai' && !prompt.trim()) || (mode === 'upload' && files.length === 0);
+        const tooltipText = '';
 
         return (
           <div className="relative group">
@@ -793,7 +758,7 @@ export default function CreateTab() {
         <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4" onClick={() => setShowUpgradeModal(false)}>
           <div className="bg-white rounded-2xl p-6 max-w-[400px] w-full" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-alu-text text-center mb-1">Upgrade Credits</h3>
-            <p className="text-sm text-alu-text-secondary text-center mb-5">Pay for more AI images and shorts</p>
+            <p className="text-sm text-alu-text-secondary text-center mb-5">Unlock more AI image generation</p>
 
             <div className="flex flex-col gap-3">
               <button
@@ -810,13 +775,6 @@ export default function CreateTab() {
               >
                 Credit Pack
                 <span className="block text-xs font-normal text-alu-text-secondary mt-0.5">Adds extra AI image credits</span>
-              </button>
-              <button
-                onClick={() => handleUpgrade('short')}
-                className="w-full py-3 rounded-xl text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors"
-              >
-                Short Credit
-                <span className="block text-xs font-normal text-alu-text-secondary mt-0.5">Adds one extra AI short credit</span>
               </button>
             </div>
 
