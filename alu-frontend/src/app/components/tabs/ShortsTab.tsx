@@ -20,6 +20,10 @@ interface ShortsTabProps {
 
 export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true, showNormal = true }: ShortsTabProps) {
   const MAX_CAPTION_CHARS = 95;
+  const WHEEL_DELTA_THRESHOLD = 90;
+  const NAVIGATION_COOLDOWN_MS = 360;
+  const SWIPE_DISTANCE_THRESHOLD = 80;
+  const SWIPE_VELOCITY_THRESHOLD = 0.45;
   const { getToken } = useAuth();
   const { user } = useUser();
   const [feedMode, setFeedMode] = useState<'for-you' | 'following'>('for-you');
@@ -40,6 +44,8 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
   const touchStartTime = useRef(0);
+  const wheelDeltaAccumulator = useRef(0);
+  const lastNavigationTime = useRef(0);
   const backendUrl = BACKEND_URL;
   const normalizeAvatarUrl = (raw?: string) => {
     const value = String(raw || '').trim();
@@ -112,9 +118,9 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
 
   const shorts =
     allShorts?.filter((p: Post) => {
-      if (!showAI && !showNormal) return false;
-      if (showAI && !showNormal && !p.is_ai) return false;
-      if (!showAI && showNormal && p.is_ai) return false;
+      const isAiContent = p.is_ai === true;
+      if (isAiContent && !showAI) return false;
+      if (!isAiContent && !showNormal) return false;
       if (!searchQuery.trim()) return true;
       const q = searchQuery.trim().toLowerCase();
       return p.safePrompt?.toLowerCase().includes(q) || p.displayName?.toLowerCase().includes(q);
@@ -133,7 +139,8 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
 
   useEffect(() => {
     setCurrentIndex(0);
-  }, [feedMode, searchQuery]);
+    wheelDeltaAccumulator.current = 0;
+  }, [feedMode, searchQuery, showAI, showNormal]);
 
   useEffect(() => {
     if (currentIndex >= shortsList.length) {
@@ -327,9 +334,9 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
     const elapsed = Date.now() - touchStartTime.current;
     const velocity = Math.abs(swipeOffset) / elapsed;
 
-    if (swipeOffset < -50 || (swipeOffset < -20 && velocity > 0.3)) {
+    if (swipeOffset < -SWIPE_DISTANCE_THRESHOLD || (swipeOffset < -(SWIPE_DISTANCE_THRESHOLD * 0.5) && velocity > SWIPE_VELOCITY_THRESHOLD)) {
       goNext();
-    } else if (swipeOffset > 50 || (swipeOffset > 20 && velocity > 0.3)) {
+    } else if (swipeOffset > SWIPE_DISTANCE_THRESHOLD || (swipeOffset > (SWIPE_DISTANCE_THRESHOLD * 0.5) && velocity > SWIPE_VELOCITY_THRESHOLD)) {
       goPrev();
     }
     setSwipeOffset(0);
@@ -337,8 +344,18 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
 
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
-      if (e.deltaY > 30) goNext();
-      else if (e.deltaY < -30) goPrev();
+      e.preventDefault();
+      const now = Date.now();
+      if (now - lastNavigationTime.current < NAVIGATION_COOLDOWN_MS) return;
+
+      wheelDeltaAccumulator.current += e.deltaY;
+      if (Math.abs(wheelDeltaAccumulator.current) < WHEEL_DELTA_THRESHOLD) return;
+
+      if (wheelDeltaAccumulator.current > 0) goNext();
+      else goPrev();
+
+      wheelDeltaAccumulator.current = 0;
+      lastNavigationTime.current = now;
     },
     [goNext, goPrev]
   );
@@ -425,7 +442,7 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
             className={`w-full h-full overflow-hidden relative bg-black ${isMobile ? '' : 'md:rounded-2xl'}`}
             style={{
               transform: `translateY(${swipeOffset}px)`,
-              transition: isSwiping ? 'none' : 'transform 0.3s ease-out',
+              transition: isSwiping ? 'none' : 'transform 0.42s cubic-bezier(0.22, 0.61, 0.36, 1)',
             }}
           >
             <div className="absolute inset-0" ref={videoContainerRef} onClick={handleTapVideo}>
