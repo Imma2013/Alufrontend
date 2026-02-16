@@ -429,9 +429,6 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
             }}
           >
             <div className="absolute inset-0" ref={videoContainerRef} onClick={handleTapVideo}>
-              <div className="absolute inset-0 scale-110 opacity-55 blur-[18px]">
-                <MediaItem post={short} videoControls={false} autoPlayVideo mutedVideo videoObjectFit="cover" />
-              </div>
               <div className="absolute inset-0">
                 <MediaItem post={short} videoControls={false} autoPlayVideo videoObjectFit="contain" />
               </div>

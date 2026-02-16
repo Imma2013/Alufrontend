@@ -450,6 +450,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
         {posts.map((post) => {
           const key = getPostKey(post);
           if (!key) return null;
+          const isShortVideo = post.mediaType === 'video' && (!post.videoType || post.videoType === 'short');
           return (
             <article
               key={key}
@@ -479,7 +480,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
               </div>
 
               <div
-                className="w-full aspect-square bg-alu-surface relative overflow-hidden cursor-pointer"
+                className={`w-full relative overflow-hidden cursor-pointer ${isShortVideo ? 'aspect-[9/16] bg-black' : 'aspect-square bg-alu-surface'}`}
                 onClick={() => openPostModal(post)}
                 role="button"
                 tabIndex={0}
@@ -493,7 +494,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                 {post.mediaType === 'image' && post.images && post.images.length > 1 ? (
                   <ImageCarousel images={post.images} />
                 ) : (
-                  <MediaItem post={post} />
+                  <MediaItem post={post} videoObjectFit={isShortVideo ? 'contain' : 'cover'} />
                 )}
                 {post.is_ai && (
                   <div className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded bg-black/45 text-white backdrop-blur-sm">
