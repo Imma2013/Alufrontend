@@ -480,7 +480,7 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
               </div>
 
               <div
-                className={`w-full relative overflow-hidden cursor-pointer ${isShortVideo ? 'aspect-[9/16] bg-black' : 'aspect-square bg-alu-surface'}`}
+                className={`w-full relative overflow-hidden cursor-pointer ${isShortVideo ? 'aspect-[4/5] md:aspect-[3/4] bg-black' : 'aspect-square bg-alu-surface'}`}
                 onClick={() => openPostModal(post)}
                 role="button"
                 tabIndex={0}
