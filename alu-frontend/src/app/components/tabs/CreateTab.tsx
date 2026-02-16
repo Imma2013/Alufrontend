@@ -353,127 +353,47 @@ export default function CreateTab() {
       const token = await getToken();
       if (!token) throw new Error('You must be signed in to generate content.');
 
-      if (selectedType === 'short') {
-        // --- SHORT VIDEO STITCHING: 60s, 9:16 ---
-        const res = await fetch(`${backendUrl}/generate/short-video`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            prompt: prompt.trim(),
-            durationSeconds: 60,
-            visibility: privacy,
-            displayName,
-            avatarUrl,
-          }),
+      // --- IMAGE: single /generate call ---
+      const body = {
+        prompt: prompt.trim(),
+        type: 'image',
+        isLongVideo: false,
+        visibility: privacy,
+        displayName,
+        avatarUrl,
+      };
+
+      const response = await fetch(`${backendUrl}/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errMsg = await parseErrorResponse(response, 'Image generation failed');
+        throw new Error(errMsg);
+      }
+
+      const result = await response.json();
+
+      if (result.post && result.post.contentUrl) {
+        const fileName = `${result.post._id}.png`;
+
+        await saveFileFromUrl(result.post.contentUrl, fileName);
+
+        await db.posts.put({
+          ...result.post,
+          contentUrl: fileName,
+          synced: 1,
+          updatedAt: new Date(),
         });
 
-        if (!res.ok) {
-          const errMsg = await parseErrorResponse(res, 'Short generation failed');
-          throw new Error(errMsg);
-        }
-
-        const { jobId } = await res.json();
-        setVideoJobId(jobId);
-        setVideoStep('Starting short generation...');
-
-        // Poll for progress
-        let complete = false;
-        while (!complete) {
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          const pollToken = await getToken({ skipCache: true });
-          if (!pollToken) {
-            throw new Error('Session expired while checking short status. Please sign in again.');
-          }
-          const statusRes = await fetch(`${backendUrl}/generate/status/${jobId}`, {
-            headers: { 'Authorization': `Bearer ${pollToken}` },
-          });
-
-          if (!statusRes.ok) {
-            const statusErr = await parseErrorResponse(statusRes, 'Failed to check generation status');
-            throw new Error(statusErr);
-          }
-
-          const status = await statusRes.json();
-          setVideoProgress(status.progress);
-          setVideoStep(status.currentStep);
-
-          if (status.status === 'complete') {
-            complete = true;
-            // Save to Dexie
-            if (status.videoUrl) {
-              const fileName = `${status.postId || Date.now()}.mp4`;
-              await saveFileFromUrl(status.videoUrl, fileName);
-              await db.posts.put({
-                _id: status.postId,
-                contentUrl: fileName,
-                safePrompt: prompt.trim(),
-                mediaType: 'video',
-                videoType: 'short',
-                is_ai: true,
-                isLongForm: false,
-                userId: '',
-                timestamp: new Date(),
-                synced: 1,
-                updatedAt: new Date(),
-                visibility: privacy as 'everyone' | 'followers' | 'private',
-                thumbnailUrl: status.thumbnailUrl,
-                displayName,
-                avatarUrl,
-              });
-            }
-            setSuccess(true);
-            setPrompt('');
-            setCaption('');
-          } else if (status.status === 'failed') {
-            throw new Error(status.error || 'Short video generation failed');
-          }
-        }
-      } else {
-        // --- IMAGE: single /generate call ---
-        const body = {
-          prompt: prompt.trim(),
-          type: 'image',
-          isLongVideo: false,
-          visibility: privacy,
-          displayName,
-          avatarUrl,
-        };
-
-        const response = await fetch(`${backendUrl}/generate`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-          const errMsg = await parseErrorResponse(response, 'Image generation failed');
-          throw new Error(errMsg);
-        }
-
-        const result = await response.json();
-
-        if (result.post && result.post.contentUrl) {
-          const fileName = `${result.post._id}.png`;
-
-          await saveFileFromUrl(result.post.contentUrl, fileName);
-
-          await db.posts.put({
-            ...result.post,
-            contentUrl: fileName,
-            synced: 1,
-            updatedAt: new Date(),
-          });
-
-          setSuccess(true);
-          setPrompt('');
-          setCaption('');
-        }
+        setSuccess(true);
+        setPrompt('');
+        setCaption('');
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Something went wrong';
