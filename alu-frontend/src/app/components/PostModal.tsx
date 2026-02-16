@@ -296,7 +296,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
         if (replyingTo) {
           setComments(prev => prev.map(c =>
             c._id === replyingTo._id
-              ? { ...c, replies: [data.comment, ...(c.replies || [])], replyCount: (c.replyCount || 0) + 1 }
+              ? { ...c, replies: [...(c.replies || []), data.comment], replyCount: (c.replyCount || 0) + 1 }
               : c
           ));
           setExpandedReplies(prev => new Set(prev).add(replyingTo._id));

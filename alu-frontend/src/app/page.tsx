@@ -788,7 +788,14 @@ export default function App() {
           {!isGuest || !activeTabNeedsAuth ? (
             <>
               {activeTab === 'home' && <HomeTab showAI={showAI} showNormal={showNormal} searchQuery={homeSearchQuery} onViewUser={handleViewUser} />}
-              {activeTab === 'shorts' && <ShortsTab searchQuery={shortsSearchQuery} onViewUser={handleViewUser} />}
+              {activeTab === 'shorts' && (
+                <ShortsTab
+                  searchQuery={shortsSearchQuery}
+                  onViewUser={handleViewUser}
+                  showAI={showAI}
+                  showNormal={showNormal}
+                />
+              )}
               {activeTab === 'videos' && <VideosTab searchQuery={videosSearchQuery} showAI={showAI} showNormal={showNormal} />}
               {activeTab === 'create' && <CreateTab />}
               {activeTab === 'profile' && (

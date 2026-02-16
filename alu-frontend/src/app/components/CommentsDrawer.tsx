@@ -269,7 +269,7 @@ export default function CommentsDrawer({
                 const data = await res.json();
                 setComments(prev => prev.map(c =>
                     c._id === parentCommentId
-                        ? { ...c, replies: [data.comment, ...(c.replies || [])], replyCount: (c.replyCount || 0) + 1 }
+                        ? { ...c, replies: [...(c.replies || []), data.comment], replyCount: (c.replyCount || 0) + 1 }
                         : c
                 ));
                 setExpandedReplies(prev => new Set(prev).add(parentCommentId));

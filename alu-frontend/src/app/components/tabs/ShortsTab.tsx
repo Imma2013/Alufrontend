@@ -14,9 +14,11 @@ import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon, ShortsIcon } from '../
 interface ShortsTabProps {
   searchQuery?: string;
   onViewUser?: (userId: string) => void;
+  showAI?: boolean;
+  showNormal?: boolean;
 }
 
-export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabProps) {
+export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true, showNormal = true }: ShortsTabProps) {
   const MAX_CAPTION_CHARS = 95;
   const { getToken } = useAuth();
   const { user } = useUser();
@@ -110,6 +112,9 @@ export default function ShortsTab({ searchQuery = '', onViewUser }: ShortsTabPro
 
   const shorts =
     allShorts?.filter((p: Post) => {
+      if (!showAI && !showNormal) return false;
+      if (showAI && !showNormal && !p.is_ai) return false;
+      if (!showAI && showNormal && p.is_ai) return false;
       if (!searchQuery.trim()) return true;
       const q = searchQuery.trim().toLowerCase();
       return p.safePrompt?.toLowerCase().includes(q) || p.displayName?.toLowerCase().includes(q);
