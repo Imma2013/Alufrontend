@@ -1,21 +1,19 @@
 const express = require('express');
 const multer = require('multer');
-const { v2: cloudinary } = require('cloudinary');
 const clerkAuth = require('../middleware/clerkAuth');
 const { Post, User, Notification } = require('../config/db');
 const { notifyMentions } = require('../utils/mentions');
+const {
+  extFromMime,
+  buildKey,
+  uploadBuffer,
+  uploadVideoBufferWithThumbnail,
+} = require('../services/storj');
 
 const router = express.Router();
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
 // Multer: store in memory (buffer), 200MB limit (generous since we're just a passthrough)
-// Users store files in OPFS locally - we just sync to Cloudinary for sharing
+// Users store files in OPFS locally - backend syncs copies to Storj for sharing.
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 200 * 1024 * 1024 }, // 200MB - local-first means user's device handles the size
@@ -34,13 +32,6 @@ const upload = multer({
 });
 
 const MAX_CAPTION_LENGTH = 2200;
-const VIDEO_QUALITY_PROFILES = {
-  '360p': { height: 360, bitRate: '700k' },
-  '720p': { height: 720, bitRate: '2500k' },
-  '1080p': { height: 1080, bitRate: '4500k' },
-  '4k': { height: 2160, bitRate: '12000k' },
-};
-
 const sanitizeText = (value = '') => String(value).replace(/\s+/g, ' ').trim();
 
 /**
@@ -60,7 +51,7 @@ router.post(
   ]),
   async (req, res) => {
   const userId = req.auth.sub;
-  const { caption, mediaType, videoType, visibility, displayName, avatarUrl, is_ai, quality } = req.body;
+  const { caption, mediaType, videoType, visibility, displayName, avatarUrl, is_ai } = req.body;
   const cleanCaption = sanitizeText(caption || '');
 
   // Support both single 'file' and multiple 'files'
@@ -98,70 +89,58 @@ router.post(
       );
     }
 
-    // Upload all files to Cloudinary
-    const uploadPromises = files.map((file, index) => {
-      return new Promise((resolve, reject) => {
-        const resourceType = mediaType === 'image' ? 'image' : 'video';
-        const options = {
-          resource_type: resourceType,
-          folder: 'alu-uploads',
-          public_id: `${userId}_${Date.now()}_${index}`,
-          context: {
-            alt: cleanCaption || 'Alu upload',
-            user_id: userId,
-            media_type: mediaType,
-          },
-        };
-
-        // For videos, apply quality and generate thumbnail
-        if (resourceType === 'video') {
-          const profile = VIDEO_QUALITY_PROFILES[quality] || VIDEO_QUALITY_PROFILES['360p'];
-
-          // Normalize uploads into delivery-safe mp4 and generate poster.
-          options.transformation = [
-            { fetch_format: 'mp4' },
-            { video_codec: 'h264', audio_codec: 'aac' },
-          ];
-          options.eager = [
-            { format: 'jpg', width: 400, height: 400, crop: 'thumb', gravity: 'auto' },
-            {
-              format: 'mp4',
-              quality: 'auto:good',
-              crop: 'limit',
-              height: profile.height,
-              bitrate: profile.bitRate,
-              flags: 'streaming_attachment',
-            },
-            {
-              format: 'webm',
-              quality: 'auto:good',
-              crop: 'limit',
-              height: profile.height,
-            },
-          ];
-          options.eager_async = false;
-        } else {
-          // Normalize image output for fast delivery and consistent quality.
-          options.transformation = [{ fetch_format: 'auto', quality: 'auto:good' }];
+    const uploaded = await Promise.all(
+      files.map(async (file, index) => {
+        if (mediaType === 'video') {
+          const result = await uploadVideoBufferWithThumbnail(file.buffer, {
+            folder: 'alu-uploads',
+            userId,
+            prefix: `video-${index}`,
+            mimeType: file.mimetype || 'video/mp4',
+          });
+          return {
+            url: result.videoUrl,
+            thumbnailUrl: result.thumbnailUrl || null,
+            bytes: file.size || file.buffer.length || 0,
+            format: extFromMime(file.mimetype || '', 'mp4'),
+            width: 0,
+            height: 0,
+            duration: 0,
+          };
         }
 
-        const uploadStream = cloudinary.uploader.upload_stream(options, (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
+        const ext = extFromMime(file.mimetype || '', 'jpg');
+        const key = buildKey({
+          folder: 'alu-uploads',
+          userId,
+          prefix: `image-${index}`,
+          ext,
         });
+        const url = await uploadBuffer({
+          buffer: file.buffer,
+          contentType: file.mimetype || 'image/jpeg',
+          key,
+        });
+        return {
+          url,
+          thumbnailUrl: null,
+          bytes: file.size || file.buffer.length || 0,
+          format: ext,
+          width: 0,
+          height: 0,
+          duration: 0,
+        };
+      })
+    );
 
-        uploadStream.end(file.buffer);
-      });
-    });
-
-    const cloudResults = await Promise.all(uploadPromises);
-    const imageUrls = cloudResults.map(result => result.secure_url);
+    const mediaUrls = uploaded.map((u) => u.url);
+    const primary = uploaded[0];
 
     // Create Post in MongoDB
     const post = await Post.create({
       userId,
-      contentUrl: imageUrls[0], // First image/video as primary
-      images: imageUrls.length > 1 ? imageUrls : undefined, // Store all URLs if multiple
+      contentUrl: mediaUrls[0], // First image/video as primary
+      images: mediaType === 'image' && mediaUrls.length > 1 ? mediaUrls : undefined,
       caption: caption || '',
       safePrompt: cleanCaption || 'User upload',
       originalPrompt: cleanCaption || '',
@@ -169,18 +148,18 @@ router.post(
       mediaType,
       videoType: mediaType === 'video' ? (videoType || 'short') : undefined,
       isLongForm: videoType === 'long',
-      thumbnailUrl: cloudResults[0].eager?.[0]?.secure_url || null,
+      thumbnailUrl: mediaType === 'video' ? (primary.thumbnailUrl || null) : null,
       visibility: visibility || 'everyone',
       displayName: displayName || '',
       avatarUrl: avatarUrl || '',
       uploadMeta: {
         originalCount: files.length,
         firstAsset: {
-          bytes: cloudResults[0]?.bytes || 0,
-          format: cloudResults[0]?.format || '',
-          width: cloudResults[0]?.width || 0,
-          height: cloudResults[0]?.height || 0,
-          duration: cloudResults[0]?.duration || 0,
+          bytes: primary?.bytes || 0,
+          format: primary?.format || '',
+          width: primary?.width || 0,
+          height: primary?.height || 0,
+          duration: primary?.duration || 0,
         },
       },
     });

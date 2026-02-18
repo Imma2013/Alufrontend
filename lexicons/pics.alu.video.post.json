@@ -1,0 +1,54 @@
+{
+  "lexicon": 1,
+  "id": "pics.alu.video.post",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Alu decentralized long-form video record.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["videoUrl", "mimeType", "createdAt"],
+        "properties": {
+          "videoUrl": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048,
+            "description": "Storj URL to the video file"
+          },
+          "thumbUrl": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "mimeType": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "e.g. video/mp4"
+          },
+          "durationMs": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "aspectRatio": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "e.g. 16:9"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

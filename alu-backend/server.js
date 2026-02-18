@@ -18,6 +18,7 @@ const postRoutes = require('./routes/postRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const dmRoutes = require('./routes/dmRoutes');
 const storyRoutes = require('./routes/storyRoutes');
+const atprotoRoutes = require('./routes/atprotoRoutes');
 const clerkAuth = require('./middleware/clerkAuth');
 
 const app = express();
@@ -79,6 +80,7 @@ app.use('/posts', postRoutes);
 app.use('/notifications', notificationRoutes);
 app.use('/dm', dmRoutes);
 app.use('/stories', storyRoutes);
+app.use('/atproto', atprotoRoutes);
 
 // This route is now protected. A valid Clerk token is required.
 app.post('/generate', generateLimiter, clerkAuth, async (req, res) => {

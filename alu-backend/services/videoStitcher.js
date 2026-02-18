@@ -6,15 +6,15 @@
  * 2. Generate each scene as an ~8s clip with Veo 2
  * 3. Download clips to temp directory
  * 4. Concatenate with FFmpeg (bundled via ffmpeg-static)
- * 5. Upload final video to Cloudinary
+ * 5. Upload final video to Storj
  * 6. Clean up temp files
  */
 
 const { GoogleGenAI } = require('@google/genai');
-const { v2: cloudinary } = require('cloudinary');
 const ffmpegPath = require('ffmpeg-static');
 const { updateJob } = require('./videoJobs');
 const { Post, User, Notification } = require('../config/db');
+const { uploadVideoFileWithThumbnail } = require('./storj');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -26,20 +26,14 @@ const { execSync } = require('child_process');
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const ttsAi = new GoogleGenAI({ apiKey: process.env.GEMINI_TTS_API_KEY || process.env.GEMINI_API_KEY });
 
-// Configure Cloudinary
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
 const CLIP_DURATION = 8; // seconds per clip
-const MAX_PARALLEL_CLIPS = 3; // rate limiting for API
+const MAX_PARALLEL_CLIPS = Number(process.env.VIDEO_MAX_PARALLEL_CLIPS || 1); // safer default for quota
 const MAX_POLL_ATTEMPTS = 60; // 5 min per clip
 
 // Sora 2 config from env
 const SORA_API_URL = process.env.THIRD_PARTY_API_URL;
 const SORA_API_KEY = process.env.THIRD_PARTY_API_KEY;
+const ENABLE_SORA_FALLBACK = String(process.env.ENABLE_SORA_FALLBACK || 'false').toLowerCase() === 'true';
 const TEXT_MODEL_FALLBACKS = ['gemini-3-flash-preview', 'gemini-2.5-flash'];
 const DEFAULT_TTS_MODEL = process.env.GEMINI_TTS_MODEL || 'gemini-2.5-flash-preview-tts';
 const DEFAULT_TTS_VOICE = process.env.GEMINI_TTS_VOICE || 'Achird';
@@ -103,11 +97,12 @@ Video concept: ${prompt}`;
 }
 
 /**
- * Generate a single video clip — tries Sora 2 (piapi.ai) first, falls back to Veo 3.1
+ * Generate a single video clip.
+ * Default: Veo only (stable path).
+ * Optional: Sora fallback only if ENABLE_SORA_FALLBACK=true.
  */
 async function generateClip(scenePrompt, aspectRatio = '16:9') {
-    // Try Sora 2 first (storyboard mode via piapi.ai)
-    if (SORA_API_URL && SORA_API_KEY) {
+    if (ENABLE_SORA_FALLBACK && SORA_API_URL && SORA_API_KEY) {
         try {
             const soraResult = await generateClipViaSora(scenePrompt, aspectRatio);
             if (soraResult) return soraResult;
@@ -116,7 +111,7 @@ async function generateClip(scenePrompt, aspectRatio = '16:9') {
         }
     }
 
-    // Fallback: Veo 3.1
+    // Primary: Veo 3.1
     return await generateClipViaVeo(scenePrompt, aspectRatio);
 }
 
@@ -273,9 +268,9 @@ async function generateClipsInBatches(scenes, jobId, job) {
             });
         }
 
-        // Brief pause between batches to avoid rate limiting
+        // Pause between batches to avoid rate limiting
         if (i + MAX_PARALLEL_CLIPS < scenes.length) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await new Promise(resolve => setTimeout(resolve, 3500));
         }
     }
 
@@ -358,28 +353,20 @@ function mixNarrationIntoVideo(videoPath, narrationWavPath, outputPath) {
 }
 
 /**
- * Upload final video to Cloudinary
+ * Upload final video to Storj
  */
-async function uploadToCloudinary(filePath, userId, folder = 'alu-long-videos') {
-    return new Promise((resolve, reject) => {
-        cloudinary.uploader.upload(filePath, {
-            resource_type: 'video',
-            folder: folder,
-            public_id: `${userId}_${folder === 'alu-shorts' ? 'short' : 'long'}_${Date.now()}`,
-            eager: [
-                { format: 'jpg', width: 640, height: 360, crop: 'thumb', gravity: 'auto' },
-            ],
-            eager_async: false,
-            chunk_size: 20 * 1024 * 1024, // 20MB chunks for large files
-        }, (error, result) => {
-            if (error) reject(error);
-            else resolve({
-                videoUrl: result.secure_url,
-                thumbnailUrl: result.eager?.[0]?.secure_url || null,
-                duration: result.duration,
-            });
-        });
+async function uploadToStorj(filePath, userId, folder = 'alu-long-videos') {
+    const prefix = folder === 'alu-shorts' ? 'short' : 'long';
+    const uploaded = await uploadVideoFileWithThumbnail(filePath, {
+        folder,
+        userId,
+        prefix,
+        mimeType: 'video/mp4',
     });
+    return {
+        videoUrl: uploaded.videoUrl,
+        thumbnailUrl: uploaded.thumbnailUrl,
+    };
 }
 
 /**
@@ -427,7 +414,8 @@ async function processVideoJob(job) {
             throw new Error('No clips were successfully generated');
         }
 
-        if (clipPaths.length < Math.floor(numClips * 0.5)) {
+        const minRequiredClips = Math.max(2, Math.ceil(numClips * 0.3));
+        if (clipPaths.length < minRequiredClips) {
             throw new Error(`Only ${clipPaths.length}/${numClips} clips generated. Too many failures.`);
         }
 
@@ -460,14 +448,14 @@ async function processVideoJob(job) {
             }
         }
 
-        // 6. Upload to Cloudinary
+        // 6. Upload to Storj
         updateJob(jobId, {
             status: 'uploading',
             currentStep: 'Uploading your video...',
             progress: 85,
         });
 
-        const cloudResult = await uploadToCloudinary(finalVideoPath, userId, isShort ? 'alu-shorts' : 'alu-long-videos');
+        const cloudResult = await uploadToStorj(finalVideoPath, userId, isShort ? 'alu-shorts' : 'alu-long-videos');
 
         // 7. Create Post in MongoDB
         const post = await Post.create({

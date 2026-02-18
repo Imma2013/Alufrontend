@@ -1,8 +1,25 @@
 const express = require('express');
 const router = express.Router();
-const { Post, Comment, Notification } = require('../config/db');
+const { Post, Comment, Notification, User } = require('../config/db');
 const clerkAuth = require('../middleware/clerkAuth');
 const { notifyMentions } = require('../utils/mentions');
+const { deletePublicUrl } = require('../services/storj');
+
+const getAuthorizedUserIds = async (primaryUserId) => {
+    const user = await User.findOne({ userId: primaryUserId }, { aliases: 1, _id: 0 });
+    const set = new Set([primaryUserId]);
+    const aliases = Array.isArray(user?.aliases) ? user.aliases : [];
+    for (const alias of aliases) {
+        const value = String(alias || '').trim();
+        if (value) set.add(value);
+    }
+    return set;
+};
+
+const isOwnerByAliases = async (primaryUserId, ownerId) => {
+    const ids = await getAuthorizedUserIds(primaryUserId);
+    return ids.has(String(ownerId || '').trim());
+};
 // GET all liked posts for current user
 router.get('/liked', clerkAuth, async (req, res) => {
     try {
@@ -268,8 +285,9 @@ router.delete('/:postId/comments/:commentId', clerkAuth, async (req, res) => {
 
         const comment = await Comment.findById(req.params.commentId);
         if (!comment) return res.status(404).json({ error: 'Comment not found' });
-        const isCommentOwner = comment.userId === userId;
-        const isPostOwner = post.userId === userId;
+        const authIds = await getAuthorizedUserIds(userId);
+        const isCommentOwner = authIds.has(String(comment.userId || '').trim());
+        const isPostOwner = authIds.has(String(post.userId || '').trim());
         if (!isCommentOwner && !isPostOwner) {
             return res.status(403).json({ error: 'Not authorized to delete this comment' });
         }
@@ -291,7 +309,8 @@ router.put('/:id/caption', clerkAuth, async (req, res) => {
         const post = await Post.findById(req.params.id);
 
         if (!post) return res.status(404).json({ error: 'Post not found' });
-        if (post.userId !== userId) return res.status(403).json({ error: 'Not authorized' });
+        const canEdit = await isOwnerByAliases(userId, post.userId);
+        if (!canEdit) return res.status(403).json({ error: 'Not authorized' });
 
         post.safePrompt = caption;
         post.caption = caption;
@@ -318,26 +337,23 @@ router.delete('/:id', clerkAuth, async (req, res) => {
         const userId = req.auth.sub;
         const post = await Post.findById(req.params.id);
         if (!post) return res.status(404).json({ error: 'Post not found' });
-        if (post.userId !== userId) return res.status(403).json({ error: 'Not your post' });
+        const canDelete = await isOwnerByAliases(userId, post.userId);
+        if (!canDelete) return res.status(403).json({ error: 'Not your post' });
 
         // Delete associated comments and notifications
         await Comment.deleteMany({ postId: post._id });
         await Notification.deleteMany({ postId: post._id });
 
-        // Delete from Cloudinary if it's a Cloudinary URL
-        if (post.contentUrl && post.contentUrl.includes('cloudinary.com')) {
-            try {
-                const { v2: cloudinary } = require('cloudinary');
-                // Extract public_id from URL
-                const urlParts = post.contentUrl.split('/');
-                const folderAndFile = urlParts.slice(-2).join('/');
-                const publicId = folderAndFile.replace(/\.[^.]+$/, '');
-                await cloudinary.uploader.destroy(publicId, {
-                    resource_type: post.mediaType === 'video' ? 'video' : 'image',
-                });
-            } catch (cloudErr) {
-                console.error('Cloudinary delete failed (non-fatal):', cloudErr.message);
-            }
+        // Best-effort object cleanup from Storj.
+        try {
+            const urls = new Set([
+                post.contentUrl,
+                post.thumbnailUrl,
+                ...(Array.isArray(post.images) ? post.images : []),
+            ].filter(Boolean));
+            await Promise.all(Array.from(urls).map((url) => deletePublicUrl(url).catch(() => false)));
+        } catch (storjErr) {
+            console.error('Storj delete failed (non-fatal):', storjErr.message);
         }
 
         await post.deleteOne();

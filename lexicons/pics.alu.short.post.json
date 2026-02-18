@@ -1,0 +1,49 @@
+{
+  "lexicon": 1,
+  "id": "pics.alu.short.post",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Alu decentralized short-form video record.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["videoUrl", "mimeType", "createdAt"],
+        "properties": {
+          "videoUrl": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048,
+            "description": "Storj URL to the short video"
+          },
+          "thumbUrl": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "caption": {
+            "type": "string",
+            "maxLength": 280
+          },
+          "mimeType": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "durationMs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 180000
+          },
+          "isAi": {
+            "type": "boolean",
+            "default": false
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}
