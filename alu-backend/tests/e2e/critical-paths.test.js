@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 require('dotenv').config();
 
 const baseUrl = (process.env.E2E_BASE_URL || '').replace(/\/$/, '');
-const bearerToken = process.env.E2E_CLERK_BEARER || '';
+const bearerToken = process.env.E2E_AUTH_BEARER || process.env.E2E_CLERK_BEARER || '';
 const runMutating = process.env.E2E_RUN_MUTATING === 'true';
 const e2eRequired = process.env.E2E_REQUIRED === 'true';
 
@@ -35,9 +35,9 @@ async function fetchJson(path, options = {}) {
 function ensureLiveRunEnabled() {
   if (!baseUrl || !bearerToken || !runMutating) {
     if (e2eRequired) {
-      throw new Error('E2E_REQUIRED=true but E2E_BASE_URL / E2E_CLERK_BEARER / E2E_RUN_MUTATING=true not fully configured.');
+      throw new Error('E2E_REQUIRED=true but E2E_BASE_URL / E2E_AUTH_BEARER (or E2E_CLERK_BEARER) / E2E_RUN_MUTATING=true not fully configured.');
     }
-    log('SKIP: Set E2E_BASE_URL, E2E_CLERK_BEARER, and E2E_RUN_MUTATING=true to run live E2E tests.');
+    log('SKIP: Set E2E_BASE_URL, E2E_AUTH_BEARER (or E2E_CLERK_BEARER), and E2E_RUN_MUTATING=true to run live E2E tests.');
     return false;
   }
   return true;

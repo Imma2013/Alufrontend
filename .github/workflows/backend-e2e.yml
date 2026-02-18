@@ -33,6 +33,7 @@ jobs:
           E2E_REQUIRED: "true"
           E2E_RUN_MUTATING: "true"
           E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
+          E2E_AUTH_BEARER: ${{ secrets.E2E_AUTH_BEARER }}
           E2E_CLERK_BEARER: ${{ secrets.E2E_CLERK_BEARER }}
           E2E_SHORT_PRICE_ID: ${{ secrets.E2E_SHORT_PRICE_ID }}
           E2E_WEBHOOK_USER_ID: ${{ secrets.E2E_WEBHOOK_USER_ID }}
