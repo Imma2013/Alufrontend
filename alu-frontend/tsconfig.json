@@ -23,6 +23,9 @@
             }
         ],
         "paths": {
+            "@clerk/nextjs": [
+                "./src/app/lib/auth"
+            ],
             "@/*": [
                 "./src/*"
             ]

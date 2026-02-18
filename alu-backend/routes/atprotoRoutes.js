@@ -1,4 +1,6 @@
 const express = require('express');
+const clerkAuth = require('../middleware/clerkAuth');
+const { createAtSessionToken } = require('../middleware/clerkAuth');
 const {
   bootLexicons,
   listLexiconIds,
@@ -8,9 +10,74 @@ const {
 const {
   isAtprotoConfigured,
   atprotoServiceUrl,
+  createUserAgent,
+  getActorProfile,
+  publishLexiconSchemas,
 } = require('../services/atprotoClient');
 
 const router = express.Router();
+
+router.post('/auth/login', async (req, res) => {
+  try {
+    const identifier = String(req.body?.identifier || '').trim();
+    const password = String(req.body?.password || '').trim();
+    if (!identifier || !password) {
+      return res.status(400).json({ error: 'identifier and password are required' });
+    }
+
+    const { agent, did } = await createUserAgent(identifier, password);
+    const profile = await getActorProfile(agent, did || identifier);
+    const token = createAtSessionToken({
+      did: did || profile.did || '',
+      handle: profile.handle || identifier,
+      profile,
+    });
+
+    return res.json({
+      ok: true,
+      token,
+      user: {
+        did: did || profile.did || '',
+        handle: profile.handle || identifier,
+        displayName: profile.displayName || profile.handle || identifier,
+        avatarUrl: profile.avatar || '',
+      },
+    });
+  } catch (err) {
+    return res.status(401).json({ ok: false, error: err?.message || 'AT login failed' });
+  }
+});
+
+router.get('/auth/me', clerkAuth, async (req, res) => {
+  const auth = req.auth || {};
+  return res.json({
+    ok: true,
+    provider: req.authProvider || 'unknown',
+    user: {
+      did: auth.did || auth.sub || '',
+      handle: auth.handle || auth.username || '',
+      displayName: auth.displayName || auth.username || '',
+      avatarUrl: auth.picture || auth.image_url || '',
+    },
+  });
+});
+
+router.post('/publish-lexicons', async (req, res) => {
+  try {
+    const expected = String(process.env.ATPROTO_ADMIN_KEY || '').trim();
+    const provided = String(req.headers['x-admin-key'] || '').trim();
+    if (!expected) {
+      return res.status(400).json({ error: 'ATPROTO_ADMIN_KEY is not configured' });
+    }
+    if (!provided || provided !== expected) {
+      return res.status(403).json({ error: 'Invalid admin key' });
+    }
+    const published = await publishLexiconSchemas();
+    return res.json({ ok: true, published });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err?.message || 'Lexicon publish failed' });
+  }
+});
 
 router.get('/health', (req, res) => {
   try {
@@ -66,4 +133,3 @@ router.post('/validate-record', (req, res) => {
 bootLexicons();
 
 module.exports = router;
-
