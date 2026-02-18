@@ -2,11 +2,9 @@ import type { NextConfig } from "next";
 import path from "node:path";
 
 const nextConfig: NextConfig = {
-    // Monorepo: force Turbopack to treat alu-frontend as the app root.
     turbopack: {
-        root: path.resolve(__dirname),
         resolveAlias: {
-            "@clerk/nextjs": path.resolve(__dirname, "src/app/lib/auth.tsx"),
+            "@clerk/nextjs": "./src/app/lib/auth",
         },
     },
     webpack: (config) => {
