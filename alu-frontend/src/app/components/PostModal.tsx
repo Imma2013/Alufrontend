@@ -574,7 +574,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
             <div className="w-full h-full flex items-center justify-center">
               {post.images && post.images.length > 1 ? (
                 <div className="w-full h-full">
-                  <ImageCarousel images={post.images} />
+                  <ImageCarousel images={post.images} objectFit="contain" />
                 </div>
               ) : (
                 <img

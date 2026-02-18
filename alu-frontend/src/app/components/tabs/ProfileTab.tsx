@@ -121,6 +121,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
   const [ownFollowingCount, setOwnFollowingCount] = useState(0);
   const [ownFollowers, setOwnFollowers] = useState<string[]>([]);
   const [ownFollowing, setOwnFollowing] = useState<string[]>([]);
+  const [ownServerAvatarUrl, setOwnServerAvatarUrl] = useState('');
   const [isResettingCache, setIsResettingCache] = useState(false);
   const [cacheResetMessage, setCacheResetMessage] = useState('');
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
@@ -139,6 +140,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
         setOwnFollowingCount(data.followingCount || 0);
         setOwnFollowers(Array.isArray(data.followers) ? data.followers : []);
         setOwnFollowing(Array.isArray(data.following) ? data.following : []);
+        setOwnServerAvatarUrl(String(data.avatarUrl || '').trim());
       }
     } catch {
     }
@@ -432,7 +434,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
   const otherDisplayName = otherUser?.displayName || 'User';
   const otherAvatarLetter = otherDisplayName[0]?.toUpperCase() || 'U';
   const otherBio = otherUser?.bio || '';
-  const ownAvatarUrl = normalizeAvatarUrl(user?.imageUrl || '');
+  const ownAvatarUrl = normalizeAvatarUrl(user?.imageUrl || ownServerAvatarUrl || '');
   const otherAvatarUrl = normalizeAvatarUrl(otherUser?.avatarUrl || '');
 
   useEffect(() => {
@@ -441,7 +443,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
 
   useEffect(() => {
     setOwnAvatarBroken(false);
-  }, [user?.imageUrl]);
+  }, [user?.imageUrl, ownServerAvatarUrl]);
 
   useEffect(() => {
     setConnectionBrokenAvatars({});

@@ -5,9 +5,10 @@ import { useState, useEffect } from 'react';
 interface ImageCarouselProps {
   images: string[]; // Array of image URLs
   aspectRatio?: string; // Default '4/3'
+  objectFit?: 'cover' | 'contain';
 }
 
-export default function ImageCarousel({ images, aspectRatio = '4/3' }: ImageCarouselProps) {
+export default function ImageCarousel({ images, aspectRatio = '4/3', objectFit = 'cover' }: ImageCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
@@ -65,7 +66,7 @@ export default function ImageCarousel({ images, aspectRatio = '4/3' }: ImageCaro
         <img
           src={images[0]}
           alt=""
-          className="w-full h-full object-cover"
+          className={`w-full h-full ${objectFit === 'contain' ? 'object-contain bg-black' : 'object-cover'}`}
         />
       </div>
     );
@@ -88,7 +89,7 @@ export default function ImageCarousel({ images, aspectRatio = '4/3' }: ImageCaro
             <img
               src={url}
               alt={`Slide ${i + 1}`}
-              className="w-full h-full object-cover"
+              className={`w-full h-full ${objectFit === 'contain' ? 'object-contain bg-black' : 'object-cover'}`}
             />
           </div>
         ))}

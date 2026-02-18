@@ -69,6 +69,17 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
   }, []);
 
   useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousOverscroll = document.body.style.overscrollBehavior;
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.overscrollBehavior = previousOverscroll;
+    };
+  }, []);
+
+  useEffect(() => {
     setIsPaused(false);
     setShowComments(false);
   }, [currentIndex]);
@@ -321,6 +332,7 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isSwiping) return;
+    if (e.cancelable) e.preventDefault();
     const deltaY = e.touches[0].clientY - touchStartY.current;
     const canGoUp = currentIndex < shortsList.length - 1;
     const canGoDown = currentIndex > 0;
@@ -424,7 +436,7 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
   const creatorAvatarKey = `${short.userId || 'anon'}:${short._id}`;
 
   return (
-    <div className="w-full h-full min-h-[70vh] flex items-center justify-center animate-fade-in bg-black select-none" onWheel={handleWheel}>
+    <div className="w-full h-full min-h-[70vh] flex items-center justify-center animate-fade-in bg-black select-none overscroll-none" onWheel={handleWheel}>
       <div className="relative flex items-center justify-center w-full h-full">
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-4 text-white text-sm font-semibold">
           <button
@@ -448,6 +460,7 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
             height: isMobile ? 'calc(100vh - 120px)' : 'calc(100vh - 150px)',
             maxHeight: '780px',
             width: !isMobile && showComments ? '430px' : undefined,
+            touchAction: showComments ? 'pan-y' : 'none',
           }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
