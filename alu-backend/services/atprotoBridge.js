@@ -22,7 +22,7 @@ function mediaFromEmbed(embed) {
     return {
       mediaType: 'image',
       contentUrl: urls[0],
-      images: urls.slice(0, 3),
+      images: urls.slice(0, 4),
       thumbnailUrl: normalizeUrl(embed.images?.[0]?.thumb),
     };
   }
@@ -64,7 +64,7 @@ function mediaFromEmbed(embed) {
 async function ensureUserIdentity({ userId, handle, displayName, avatarUrl }) {
   const aliases = [userId, handle].map((v) => String(v || '').trim()).filter(Boolean);
   const update = {
-    $setOnInsert: { userId, aliases: [userId] },
+    $setOnInsert: { userId },
     $addToSet: aliases.length > 0 ? { aliases: { $each: aliases } } : undefined,
     $set: {
       ...(displayName ? { displayName } : {}),
@@ -143,6 +143,76 @@ async function syncFollows({ actor, maxFollows = 150 }) {
     fetched,
     discovered: unique.length,
     added: newFollowing.length,
+  };
+}
+
+async function syncFollowers({ actor, maxFollowers = 150 }) {
+  const agent = createPublicAgent();
+  const myUser = await User.findOne({ userId: actor }, { followers: 1, _id: 0 });
+  const existingFollowers = new Set(Array.isArray(myUser?.followers) ? myUser.followers : []);
+
+  let cursor;
+  let fetched = 0;
+  const discovered = [];
+
+  while (fetched < maxFollowers) {
+    const batchSize = Math.min(100, maxFollowers - fetched);
+    const res = await agent.app.bsky.graph.getFollowers({ actor, limit: batchSize, cursor });
+    const followers = Array.isArray(res?.data?.followers) ? res.data.followers : [];
+    if (followers.length === 0) break;
+
+    for (const f of followers) {
+      const did = String(f?.did || '').trim();
+      if (!did || did === actor) continue;
+      discovered.push({
+        userId: did,
+        handle: String(f?.handle || '').trim(),
+        displayName: String(f?.displayName || '').trim(),
+        avatarUrl: String(f?.avatar || '').trim(),
+      });
+    }
+
+    fetched += followers.length;
+    cursor = res?.data?.cursor;
+    if (!cursor) break;
+  }
+
+  const unique = [];
+  const seen = new Set();
+  for (const item of discovered) {
+    if (seen.has(item.userId)) continue;
+    seen.add(item.userId);
+    unique.push(item);
+  }
+
+  await Promise.all(
+    unique.map((f) =>
+      ensureUserIdentity({
+        userId: f.userId,
+        handle: f.handle,
+        displayName: f.displayName,
+        avatarUrl: f.avatarUrl,
+      })
+    )
+  );
+
+  const newFollowers = unique.map((f) => f.userId).filter((id) => !existingFollowers.has(id));
+  if (newFollowers.length > 0) {
+    await User.findOneAndUpdate(
+      { userId: actor },
+      { $addToSet: { followers: { $each: newFollowers } } },
+      { upsert: true }
+    );
+    await User.updateMany(
+      { userId: { $in: newFollowers } },
+      { $addToSet: { following: actor } }
+    );
+  }
+
+  return {
+    fetched,
+    discovered: unique.length,
+    added: newFollowers.length,
   };
 }
 
@@ -242,6 +312,7 @@ async function syncAtBridge({
     actorDid,
     actorHandle,
     follows: { fetched: 0, discovered: 0, added: 0 },
+    followers: { fetched: 0, discovered: 0, added: 0 },
     posts: { scanned: 0, imported: 0, updated: 0, skipped: 0, actors: 0 },
   };
 
@@ -254,6 +325,7 @@ async function syncAtBridge({
 
   if (importFollows) {
     stats.follows = await syncFollows({ actor: actorDid, maxFollows });
+    stats.followers = await syncFollowers({ actor: actorDid, maxFollowers: maxFollows });
   }
 
   if (importOwnPosts) {
@@ -295,5 +367,6 @@ async function syncAtBridge({
 module.exports = {
   syncAtBridge,
   syncFollows,
+  syncFollowers,
   importAuthorPosts,
 };

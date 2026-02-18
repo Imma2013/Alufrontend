@@ -119,7 +119,7 @@ async function syncUserDirectory(claims) {
   await User.findOneAndUpdate(
     { userId },
     {
-      $setOnInsert: { userId, aliases: [userId] },
+      $setOnInsert: { userId },
       ...(aliases.length > 0 ? { $addToSet: { aliases: { $each: aliases } } } : {}),
       ...(Object.keys(setFields).length > 0 ? { $set: setFields } : {}),
     },

@@ -203,7 +203,7 @@ router.post('/me/reconcile', clerkAuth, async (req, res) => {
         const me = await User.findOneAndUpdate(
             { userId },
             {
-                $setOnInsert: { userId, aliases: [userId] },
+                $setOnInsert: { userId },
                 ...(aliases.length > 0 ? { $addToSet: { aliases: { $each: aliases } } } : {}),
             },
             { upsert: true, new: true }

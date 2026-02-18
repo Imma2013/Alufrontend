@@ -205,8 +205,8 @@ export default function CreateTab() {
         const maxBytes = 200 * 1024 * 1024;
 
         if (selectedType === 'image') {
-          if (selectedFiles.length > 3) {
-            throw new Error('Maximum 3 images per post.');
+          if (selectedFiles.length > 4) {
+            throw new Error('Maximum 4 images per post.');
           }
           if (selectedFiles.some((f) => !f.type.startsWith('image/'))) {
             throw new Error('Image posts only accept image files.');
@@ -503,7 +503,7 @@ export default function CreateTab() {
                 Tap to upload {selectedType === 'image' ? 'photos' : 'a video'}
               </p>
               <p className="text-xs text-alu-text-tertiary">
-                {selectedType === 'image' ? 'JPG, PNG, GIF, WebP (up to 3)' : 'MP4, MOV, WebM'} - max 200MB
+                {selectedType === 'image' ? 'JPG, PNG, GIF, WebP (up to 4)' : 'MP4, MOV, WebM'} - max 200MB
               </p>
             </button>
           ) : (
