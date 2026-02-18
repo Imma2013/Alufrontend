@@ -261,7 +261,7 @@ export function SignInButton({ children }: { children: React.ReactElement; mode?
   });
 }
 
-export function UserButton() {
+export function UserButton(_props: { afterSignOutUrl?: string } = {}) {
   const ctx = useContext(AuthContext);
   const [open, setOpen] = useState(false);
   if (!ctx || !ctx.user) return null;
