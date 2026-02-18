@@ -3,7 +3,7 @@
 import { BACKEND_URL } from '@/app/lib/backend';
 
 import { useState } from 'react';
-import { useAuth } from '@/app/lib/auth';
+import { useAuth } from '../lib/auth';
 import { Post, db } from '../db';
 
 interface EditCaptionModalProps {
@@ -103,4 +103,6 @@ export default function EditCaptionModal({ post, onClose, onSaved }: EditCaption
     </div>
   );
 }
+
+
 

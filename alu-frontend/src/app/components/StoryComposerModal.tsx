@@ -4,7 +4,7 @@ import { BACKEND_URL } from '@/app/lib/backend';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Story, db } from '../db';
-import { useAuth } from '@/app/lib/auth';
+import { useAuth } from '../lib/auth';
 
 interface StoryComposerModalProps {
   isOpen: boolean;
@@ -243,3 +243,5 @@ export default function StoryComposerModal({ isOpen, userId, displayName, avatar
     document.body
   );
 }
+
+

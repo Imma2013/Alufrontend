@@ -5,7 +5,7 @@ import { getPostShareUrl } from '@/app/lib/publicUrl';
 
 import { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useAuth, useUser } from '@/app/lib/auth';
+import { useAuth, useUser } from '../../lib/auth';
 import { db, Post } from '../../db';
 import { pullChanges, pushChanges } from '../../syncService';
 import MediaItem from '../MediaItem';
@@ -586,4 +586,6 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
     </div>
   );
 }
+
+
 

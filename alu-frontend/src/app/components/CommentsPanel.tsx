@@ -3,7 +3,7 @@
 import { BACKEND_URL } from '@/app/lib/backend';
 
 import { useState, useEffect, useRef } from 'react';
-import { useAuth, useUser } from '@/app/lib/auth';
+import { useAuth, useUser } from '../lib/auth';
 
 interface CommentData {
     _id: string;
@@ -427,4 +427,6 @@ export default function CommentsPanel({ postId, isOpen, onClose }: CommentsPanel
         </div>
     );
 }
+
+
 

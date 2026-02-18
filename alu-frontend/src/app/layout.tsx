@@ -1,4 +1,4 @@
-import { ClerkProvider } from "@/app/lib/auth";
+import { ClerkProvider } from "./lib/auth";
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
@@ -70,4 +70,6 @@ export default function RootLayout({
     </ClerkProvider>
   );
 }
+
+
 

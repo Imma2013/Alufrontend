@@ -2,8 +2,8 @@
 
 import { BACKEND_URL } from '@/app/lib/backend';
 import { useState, useRef } from 'react';
-import { useUser } from '@/app/lib/auth';
-import { useAuth } from '@/app/lib/auth';
+import { useUser } from '../lib/auth';
+import { useAuth } from '../lib/auth';
 
 interface EditProfileProps {
     onBack: () => void;
@@ -164,3 +164,5 @@ export default function EditProfile({ onBack }: EditProfileProps) {
         </div>
     );
 }
+
+

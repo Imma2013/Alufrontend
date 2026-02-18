@@ -3,7 +3,7 @@
 import { BACKEND_URL } from '@/app/lib/backend';
 
 import { useState, useRef, useEffect } from 'react';
-import { useAuth, useUser } from '@/app/lib/auth';
+import { useAuth, useUser } from '../../lib/auth';
 import { ImageIcon, ZapIcon, FilmIcon, SparkleIcon, UploadIcon, GlobeIcon, LockIcon, UsersIcon } from '../icons';
 import { db } from '../../db';
 import { saveFileFromUrl, saveFileFromBlob } from '../../fileSystem';
@@ -714,5 +714,7 @@ export default function CreateTab() {
     </div>
   );
 }
+
+
 
 

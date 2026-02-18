@@ -4,7 +4,7 @@ import { BACKEND_URL } from '@/app/lib/backend';
 
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useAuth, useUser } from '@/app/lib/auth';
+import { useAuth, useUser } from '../lib/auth';
 import { HeartIcon } from './icons';
 
 interface CommentData {
@@ -652,4 +652,6 @@ export default function CommentsDrawer({
         document.body
     );
 }
+
+
 

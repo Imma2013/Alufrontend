@@ -5,7 +5,7 @@ import { getPostShareUrl } from '@/app/lib/publicUrl';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useAuth, useUser } from '@/app/lib/auth';
+import { useAuth, useUser } from '../../lib/auth';
 import { db, Post } from '../../db';
 import MediaItem from '../MediaItem';
 import CommentsDrawer from '../CommentsDrawer';
@@ -594,4 +594,6 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
     </div>
   );
 }
+
+
 

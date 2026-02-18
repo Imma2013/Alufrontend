@@ -4,7 +4,7 @@ import { BACKEND_URL } from '@/app/lib/backend';
 
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useAuth, useUser } from '@/app/lib/auth';
+import { useAuth, useUser } from '../lib/auth';
 import { Post, db } from '../db';
 import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon, MoreVertIcon } from './icons';
 import ImageCarousel from './ImageCarousel';
@@ -839,4 +839,6 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
 
   return createPortal(modal, document.body);
 }
+
+
 

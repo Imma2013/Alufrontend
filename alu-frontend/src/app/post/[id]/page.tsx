@@ -5,7 +5,7 @@ import { getPostShareUrl } from '@/app/lib/publicUrl';
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { useAuth, useUser } from '@/app/lib/auth';
+import { useAuth, useUser } from '../../lib/auth';
 import { HeartIcon, CommentIcon, ShareIcon, AluLogo } from '../../components/icons';
 
 interface PostData {
@@ -273,3 +273,5 @@ export default function PostPage() {
         </div>
     );
 }
+
+

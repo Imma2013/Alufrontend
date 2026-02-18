@@ -5,7 +5,7 @@ import { getPostShareUrl, getProfileShareUrl } from '@/app/lib/publicUrl';
 
 import { useState, useEffect, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useUser, useClerk, useAuth } from '@/app/lib/auth';
+import { useUser, useClerk, useAuth } from '../../lib/auth';
 import { db, Post } from '../../db';
 import { pullChanges } from '../../syncService';
 import MediaItem from '../MediaItem';
@@ -972,5 +972,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
     </div>
   );
 }
+
+
 
 

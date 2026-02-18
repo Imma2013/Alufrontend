@@ -5,7 +5,7 @@ import { getWatchShareUrl } from '@/app/lib/publicUrl';
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useAuth, useUser } from '@/app/lib/auth';
+import { useAuth, useUser } from '../../lib/auth';
 import { HeartIcon, ShareIcon, AluLogo } from '../../components/icons';
 
 interface PostData {
@@ -804,3 +804,5 @@ export default function WatchPage() {
     </div>
   );
 }
+
+
