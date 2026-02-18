@@ -5,7 +5,7 @@ import { BACKEND_URL } from '@/app/lib/backend';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Story, db } from '../db';
-import { useAuth } from '@clerk/nextjs';
+import { useAuth } from '@/app/lib/auth';
 
 interface StoryGroup {
   userId: string;

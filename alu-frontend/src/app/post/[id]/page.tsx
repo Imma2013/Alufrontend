@@ -5,7 +5,7 @@ import { getPostShareUrl } from '@/app/lib/publicUrl';
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { useAuth, useUser } from '@clerk/nextjs';
+import { useAuth, useUser } from '@/app/lib/auth';
 import { HeartIcon, CommentIcon, ShareIcon, AluLogo } from '../../components/icons';
 
 interface PostData {

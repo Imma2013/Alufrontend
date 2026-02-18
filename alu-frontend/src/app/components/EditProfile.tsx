@@ -2,8 +2,8 @@
 
 import { BACKEND_URL } from '@/app/lib/backend';
 import { useState, useRef } from 'react';
-import { useUser } from '@clerk/nextjs';
-import { useAuth } from '@clerk/nextjs';
+import { useUser } from '@/app/lib/auth';
+import { useAuth } from '@/app/lib/auth';
 
 interface EditProfileProps {
     onBack: () => void;

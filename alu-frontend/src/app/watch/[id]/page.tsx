@@ -5,7 +5,7 @@ import { getWatchShareUrl } from '@/app/lib/publicUrl';
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useAuth, useUser } from '@clerk/nextjs';
+import { useAuth, useUser } from '@/app/lib/auth';
 import { HeartIcon, ShareIcon, AluLogo } from '../../components/icons';
 
 interface PostData {

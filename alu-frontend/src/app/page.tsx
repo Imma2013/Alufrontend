@@ -3,7 +3,7 @@
 import { BACKEND_URL } from '@/app/lib/backend';
 
 import { useState, useEffect } from 'react';
-import { UserButton, useUser, SignInButton, useAuth } from '@clerk/nextjs';
+import { UserButton, useUser, SignInButton, useAuth } from '@/app/lib/auth';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { initDb, db, Post } from './db';
 import {

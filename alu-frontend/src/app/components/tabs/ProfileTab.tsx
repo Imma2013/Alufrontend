@@ -5,7 +5,7 @@ import { getPostShareUrl, getProfileShareUrl } from '@/app/lib/publicUrl';
 
 import { useState, useEffect, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useUser, useClerk, useAuth } from '@clerk/nextjs';
+import { useUser, useClerk, useAuth } from '@/app/lib/auth';
 import { db, Post } from '../../db';
 import { pullChanges } from '../../syncService';
 import MediaItem from '../MediaItem';

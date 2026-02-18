@@ -3,7 +3,7 @@
 import { BACKEND_URL } from '@/app/lib/backend';
 
 import { useState } from 'react';
-import { useAuth } from '@clerk/nextjs';
+import { useAuth } from '@/app/lib/auth';
 import { Post, db } from '../db';
 
 interface EditCaptionModalProps {

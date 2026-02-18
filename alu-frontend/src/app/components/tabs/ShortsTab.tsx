@@ -5,7 +5,7 @@ import { getPostShareUrl } from '@/app/lib/publicUrl';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useAuth, useUser } from '@clerk/nextjs';
+import { useAuth, useUser } from '@/app/lib/auth';
 import { db, Post } from '../../db';
 import MediaItem from '../MediaItem';
 import CommentsDrawer from '../CommentsDrawer';
@@ -20,8 +20,9 @@ interface ShortsTabProps {
 
 export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true, showNormal = true }: ShortsTabProps) {
   const MAX_CAPTION_CHARS = 95;
-  const WHEEL_DELTA_THRESHOLD = 90;
-  const NAVIGATION_COOLDOWN_MS = 360;
+  const WHEEL_DELTA_THRESHOLD = 60;
+  const NAVIGATION_COOLDOWN_MS = 260;
+  const WHEEL_RESET_IDLE_MS = 140;
   const SWIPE_DISTANCE_THRESHOLD = 80;
   const SWIPE_VELOCITY_THRESHOLD = 0.45;
   const { getToken } = useAuth();
@@ -46,6 +47,8 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
   const touchStartTime = useRef(0);
   const wheelDeltaAccumulator = useRef(0);
   const lastNavigationTime = useRef(0);
+  const lastWheelEventTime = useRef(0);
+  const lastWheelDirection = useRef<1 | -1 | 0>(0);
   const backendUrl = BACKEND_URL;
   const normalizeAvatarUrl = (raw?: string) => {
     const value = String(raw || '').trim();
@@ -140,6 +143,7 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
   useEffect(() => {
     setCurrentIndex(0);
     wheelDeltaAccumulator.current = 0;
+    lastWheelDirection.current = 0;
   }, [feedMode, searchQuery, showAI, showNormal]);
 
   useEffect(() => {
@@ -348,13 +352,24 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
       const now = Date.now();
       if (now - lastNavigationTime.current < NAVIGATION_COOLDOWN_MS) return;
 
+      const direction: 1 | -1 = e.deltaY >= 0 ? 1 : -1;
+      const idleTooLong = now - lastWheelEventTime.current > WHEEL_RESET_IDLE_MS;
+      const directionChanged = lastWheelDirection.current !== 0 && lastWheelDirection.current !== direction;
+      if (idleTooLong || directionChanged) {
+        wheelDeltaAccumulator.current = 0;
+      }
+
       wheelDeltaAccumulator.current += e.deltaY;
+      lastWheelEventTime.current = now;
+      lastWheelDirection.current = direction;
+
       if (Math.abs(wheelDeltaAccumulator.current) < WHEEL_DELTA_THRESHOLD) return;
 
       if (wheelDeltaAccumulator.current > 0) goNext();
       else goPrev();
 
       wheelDeltaAccumulator.current = 0;
+      lastWheelDirection.current = 0;
       lastNavigationTime.current = now;
     },
     [goNext, goPrev]

@@ -4,7 +4,7 @@ import { BACKEND_URL } from '@/app/lib/backend';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useAuth, useUser } from '@clerk/nextjs';
+import { useAuth, useUser } from '@/app/lib/auth';
 import { db, DMMessage, DMThread } from '../../db';
 import { MessagesIcon, SearchIcon } from '../icons';
 

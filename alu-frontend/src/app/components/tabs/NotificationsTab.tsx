@@ -3,7 +3,7 @@
 import { BACKEND_URL } from '@/app/lib/backend';
 
 import { useState, useEffect } from 'react';
-import { useAuth } from '@clerk/nextjs';
+import { useAuth } from '@/app/lib/auth';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { NotificationsIcon } from '../icons';
 import NotificationItem from '../NotificationItem';
