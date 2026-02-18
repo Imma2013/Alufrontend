@@ -242,12 +242,20 @@ export function useClerk() {
   };
 }
 
+type ClickableChildProps = {
+  onClick?: React.MouseEventHandler<HTMLElement>;
+};
+
 export function SignInButton({ children }: { children: React.ReactElement; mode?: string }) {
   const ctx = useContext(AuthContext);
   if (!ctx) return children;
-  return React.cloneElement(children, {
-    onClick: (e: React.MouseEvent) => {
+  if (!React.isValidElement<ClickableChildProps>(children)) return children;
+
+  const existingOnClick = children.props.onClick;
+  return React.cloneElement<ClickableChildProps>(children, {
+    onClick: (e) => {
       e.preventDefault();
+      existingOnClick?.(e);
       ctx.openSignIn();
     },
   });
@@ -281,4 +289,3 @@ export function UserButton() {
     </div>
   );
 }
-
