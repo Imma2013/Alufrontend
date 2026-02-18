@@ -14,6 +14,7 @@ const {
   getActorProfile,
   publishLexiconSchemas,
 } = require('../services/atprotoClient');
+const { syncAtBridge } = require('../services/atprotoBridge');
 
 const router = express.Router();
 
@@ -60,6 +61,45 @@ router.get('/auth/me', clerkAuth, async (req, res) => {
       avatarUrl: auth.picture || auth.image_url || '',
     },
   });
+});
+
+router.get('/bridge/status', clerkAuth, async (req, res) => {
+  const auth = req.auth || {};
+  return res.json({
+    ok: true,
+    actorDid: String(auth.did || auth.sub || '').trim(),
+    actorHandle: String(auth.handle || auth.username || '').trim(),
+  });
+});
+
+router.post('/bridge/sync', clerkAuth, async (req, res) => {
+  try {
+    const auth = req.auth || {};
+    const actorDid = String(auth.did || auth.sub || '').trim();
+    const actorHandle = String(auth.handle || auth.username || '').trim();
+    if (!actorDid) {
+      return res.status(400).json({ ok: false, error: 'Missing actor DID in auth token.' });
+    }
+
+    const importFollows = req.body?.importFollows !== false;
+    const importOwnPosts = req.body?.importOwnPosts !== false;
+    const importFollowingPosts = req.body?.importFollowingPosts === true;
+    const maxFollows = Number(req.body?.maxFollows || 100);
+    const maxPostsPerActor = Number(req.body?.maxPostsPerActor || 10);
+
+    const stats = await syncAtBridge({
+      actorDid,
+      actorHandle,
+      importFollows,
+      importOwnPosts,
+      importFollowingPosts,
+      maxFollows: Math.min(Math.max(maxFollows, 1), 300),
+      maxPostsPerActor: Math.min(Math.max(maxPostsPerActor, 1), 30),
+    });
+    return res.json({ ok: true, stats });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err?.message || 'Bridge sync failed' });
+  }
 });
 
 router.post('/publish-lexicons', async (req, res) => {

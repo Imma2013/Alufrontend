@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 // User Schema - Tracks credits + profile info
 const UserSchema = new mongoose.Schema({
   userId: { type: String, required: true, unique: true },
+  aliases: [{ type: String }],
   displayName: { type: String, default: '' },
   avatarUrl: { type: String, default: '' },
   bio: { type: String, default: '' },
@@ -11,6 +12,7 @@ const UserSchema = new mongoose.Schema({
   dailyLongVids: { type: Number, default: 0 },
   monthlyShorts: { type: Number, default: 0 },
   lastResetDate: { type: Date, default: Date.now },
+  lastShortResetDate: { type: Date, default: Date.now },
   lastMonthlyResetDate: { type: Date, default: Date.now },
   isPro: { type: Boolean, default: false },
   subscriptionId: { type: String },
@@ -52,6 +54,9 @@ const PostSchema = new mongoose.Schema({
       duration: { type: Number, default: 0 },
     },
   },
+  source: { type: String, default: '' },
+  sourceUri: { type: String, default: '' },
+  sourceCid: { type: String, default: '' },
 }, { timestamps: true });
 
 // Comment Schema

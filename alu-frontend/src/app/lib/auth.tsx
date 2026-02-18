@@ -143,6 +143,27 @@ function AuthProviderInner({ children }: { children: React.ReactNode }) {
       localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
       setToken(nextToken);
       setStoredUser(nextUser);
+
+      // Bootstrap hybrid state: sync follows + media posts from AT on login.
+      try {
+        await fetch(`${BACKEND_URL}/atproto/bridge/sync`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${nextToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            importFollows: true,
+            importOwnPosts: true,
+            importFollowingPosts: false,
+            maxFollows: 120,
+            maxPostsPerActor: 10,
+          }),
+        });
+      } catch {
+        // Non-blocking: user can still sign in even if bridge sync fails.
+      }
+
       setShowSignIn(false);
       setPassword('');
     } catch (err) {
