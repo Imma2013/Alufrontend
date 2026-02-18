@@ -15,6 +15,7 @@ const {
   publishLexiconSchemas,
 } = require('../services/atprotoClient');
 const { syncAtBridge } = require('../services/atprotoBridge');
+const { User } = require('../config/db');
 
 const router = express.Router();
 
@@ -65,10 +66,19 @@ router.get('/auth/me', clerkAuth, async (req, res) => {
 
 router.get('/bridge/status', clerkAuth, async (req, res) => {
   const auth = req.auth || {};
+  const actorDid = String(auth.did || auth.sub || '').trim();
+  const profile = actorDid
+    ? await User.findOne(
+        { userId: actorDid },
+        { atBridgeLastSyncedAt: 1, atBridgeLastStats: 1, _id: 0 }
+      )
+    : null;
   return res.json({
     ok: true,
-    actorDid: String(auth.did || auth.sub || '').trim(),
+    actorDid,
     actorHandle: String(auth.handle || auth.username || '').trim(),
+    lastSyncedAt: profile?.atBridgeLastSyncedAt || null,
+    lastStats: profile?.atBridgeLastStats || null,
   });
 });
 

@@ -278,6 +278,17 @@ async function syncAtBridge({
     }
   }
 
+  await User.findOneAndUpdate(
+    { userId: actorDid },
+    {
+      $set: {
+        atBridgeLastSyncedAt: new Date(),
+        atBridgeLastStats: stats,
+      },
+    },
+    { upsert: true }
+  );
+
   return stats;
 }
 
@@ -286,4 +297,3 @@ module.exports = {
   syncFollows,
   importAuthorPosts,
 };
-

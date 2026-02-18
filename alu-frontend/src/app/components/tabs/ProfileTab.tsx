@@ -46,6 +46,14 @@ interface LookupUser {
   bio: string;
 }
 
+interface BridgeStatus {
+  lastSyncedAt: string | null;
+  lastStats: {
+    follows?: { added?: number; discovered?: number };
+    posts?: { imported?: number; updated?: number };
+  } | null;
+}
+
 function normalizeAvatarUrl(raw?: string | null): string {
   const value = String(raw || '').trim();
   if (!value) return '';
@@ -56,6 +64,13 @@ function normalizeAvatarUrl(raw?: string | null): string {
   } catch {
     return '';
   }
+}
+
+function formatBridgeTime(raw?: string | null): string {
+  if (!raw) return 'Never';
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return 'Never';
+  return date.toLocaleString();
 }
 
 export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUser }: ProfileTabProps) {
@@ -108,23 +123,90 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
   const [ownFollowing, setOwnFollowing] = useState<string[]>([]);
   const [isResettingCache, setIsResettingCache] = useState(false);
   const [cacheResetMessage, setCacheResetMessage] = useState('');
+  const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
+  const [bridgeSyncing, setBridgeSyncing] = useState(false);
+  const [bridgeMessage, setBridgeMessage] = useState('');
 
   const backendUrl = BACKEND_URL;
 
-  // Fetch own follower counts
-  useEffect(() => {
+  const refreshOwnConnections = async () => {
     if (!isOwnProfile || !userId) return;
-    fetch(`${backendUrl}/users/${userId}`)
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data) {
-          setOwnFollowersCount(data.followersCount || 0);
-          setOwnFollowingCount(data.followingCount || 0);
-          setOwnFollowers(Array.isArray(data.followers) ? data.followers : []);
-          setOwnFollowing(Array.isArray(data.following) ? data.following : []);
-        }
-      })
-      .catch(() => {});
+    try {
+      const res = await fetch(`${backendUrl}/users/${userId}`);
+      const data = res.ok ? await res.json() : null;
+      if (data) {
+        setOwnFollowersCount(data.followersCount || 0);
+        setOwnFollowingCount(data.followingCount || 0);
+        setOwnFollowers(Array.isArray(data.followers) ? data.followers : []);
+        setOwnFollowing(Array.isArray(data.following) ? data.following : []);
+      }
+    } catch {
+    }
+  };
+
+  const refreshBridgeStatus = async () => {
+    if (!isOwnProfile) return;
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`${backendUrl}/atproto/bridge/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setBridgeStatus({
+        lastSyncedAt: data?.lastSyncedAt || null,
+        lastStats: data?.lastStats || null,
+      });
+    } catch {
+    }
+  };
+
+  const runBridgeSync = async () => {
+    if (bridgeSyncing) return;
+    setBridgeSyncing(true);
+    setBridgeMessage('');
+    try {
+      const token = await getToken();
+      if (!token) {
+        setBridgeMessage('Sign in again to sync.');
+        return;
+      }
+      const res = await fetch(`${backendUrl}/atproto/bridge/sync`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          importFollows: true,
+          importOwnPosts: true,
+          importFollowingPosts: false,
+          maxFollows: 150,
+          maxPostsPerActor: 12,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBridgeMessage(data?.error || 'Sync failed.');
+        return;
+      }
+      await Promise.all([refreshOwnConnections(), refreshBridgeStatus(), pullChanges()]);
+      const added = Number(data?.stats?.follows?.added || 0);
+      const imported = Number(data?.stats?.posts?.imported || 0);
+      const updated = Number(data?.stats?.posts?.updated || 0);
+      setBridgeMessage(`Synced. +${added} follows, ${imported} imported, ${updated} updated.`);
+    } catch {
+      setBridgeMessage('Sync failed.');
+    } finally {
+      setBridgeSyncing(false);
+    }
+  };
+
+  // Fetch own follower counts + bridge status
+  useEffect(() => {
+    void refreshOwnConnections();
+    void refreshBridgeStatus();
   }, [isOwnProfile, userId, backendUrl]);
 
   // Fetch other user's profile + posts when viewing someone else
@@ -688,6 +770,24 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
             </>
           )}
         </div>
+        {isOwnProfile && (
+          <>
+            <button
+              onClick={runBridgeSync}
+              disabled={bridgeSyncing}
+              className="w-full mt-2 py-1.5 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors border border-alu-border disabled:opacity-60"
+            >
+              {bridgeSyncing ? 'Syncing from Bluesky...' : 'Sync from Bluesky'}
+            </button>
+            <p className="mt-2 text-xs text-alu-text-tertiary">
+              Last sync: {formatBridgeTime(bridgeStatus?.lastSyncedAt || null)}
+              {bridgeStatus?.lastStats
+                ? ` • +${Number(bridgeStatus.lastStats.follows?.added || 0)} follows • ${Number(bridgeStatus.lastStats.posts?.imported || 0)} imported • ${Number(bridgeStatus.lastStats.posts?.updated || 0)} updated`
+                : ''}
+            </p>
+            {bridgeMessage && <p className="mt-1 text-xs text-alu-text-tertiary">{bridgeMessage}</p>}
+          </>
+        )}
       </div>
 
       {/* Settings dropdown (own profile only) */}

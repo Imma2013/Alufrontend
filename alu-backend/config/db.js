@@ -21,6 +21,8 @@ const UserSchema = new mongoose.Schema({
   bonusShorts: { type: Number, default: 0 },
   followers: [{ type: String }],
   following: [{ type: String }],
+  atBridgeLastSyncedAt: { type: Date, default: null },
+  atBridgeLastStats: { type: mongoose.Schema.Types.Mixed, default: null },
 });
 
 // Post Schema - Tracks content
