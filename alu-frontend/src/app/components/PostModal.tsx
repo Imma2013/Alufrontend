@@ -74,7 +74,12 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
 
   // Scroll modal content to top on mount and when post changes
   useEffect(() => {
-    setMediaLoaded(!(post.mediaType === 'image' && !!post.images && post.images.length > 1));
+    // Carousel images render in a separate component; don't block them behind the loader.
+    if (post.mediaType === 'image' && Array.isArray(post.images) && post.images.length > 1) {
+      setMediaLoaded(true);
+    } else {
+      setMediaLoaded(false);
+    }
     if (modalContentRef.current) {
       modalContentRef.current.scrollTop = 0;
     }
