@@ -3,7 +3,8 @@ const { User, Post } = require('../config/db');
 const { atprotoServiceUrl } = require('./atprotoClient');
 
 function createPublicAgent() {
-  return new AtpAgent({ service: atprotoServiceUrl() });
+  // Public read endpoints should use AppView host for unauthenticated access.
+  return new AtpAgent({ service: 'https://public.api.bsky.app' });
 }
 
 function normalizeUrl(input) {
