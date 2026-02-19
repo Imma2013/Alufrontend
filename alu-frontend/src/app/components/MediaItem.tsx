@@ -10,6 +10,7 @@ interface MediaItemProps {
   videoControls?: boolean;
   autoPlayVideo?: boolean;
   videoObjectFit?: 'cover' | 'contain';
+  imageObjectFit?: 'cover' | 'contain';
   mutedVideo?: boolean;
 }
 
@@ -18,6 +19,7 @@ export default function MediaItem({
   videoControls = true,
   autoPlayVideo = false,
   videoObjectFit = 'cover',
+  imageObjectFit = 'cover',
   mutedVideo = false,
 }: MediaItemProps) {
   const [localUrl, setLocalUrl] = useState<string | null>(null);
@@ -65,14 +67,14 @@ export default function MediaItem({
 
   // Multi-image carousel
   if (hasMultipleImages && post.images) {
-    return <ImageCarousel images={post.images} />;
+    return <ImageCarousel images={post.images} objectFit={imageObjectFit} />;
   }
 
   // Single image or video
   return (
     <>
       {post.mediaType === 'image' ? (
-        <img src={localUrl || ''} alt={post.safePrompt} className="object-cover w-full h-full" />
+        <img src={localUrl || ''} alt={post.safePrompt} className={`${imageObjectFit === 'contain' ? 'object-contain bg-black' : 'object-cover'} w-full h-full`} />
       ) : (
         <video
           src={localUrl || ''}

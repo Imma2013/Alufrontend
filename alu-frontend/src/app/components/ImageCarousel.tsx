@@ -6,9 +6,17 @@ interface ImageCarouselProps {
   images: string[]; // Array of image URLs
   aspectRatio?: string; // Default '4/3'
   objectFit?: 'cover' | 'contain';
+  showDots?: 'always' | 'mobile' | 'never';
+  avoidTopRight?: boolean;
 }
 
-export default function ImageCarousel({ images, aspectRatio = '4/3', objectFit = 'cover' }: ImageCarouselProps) {
+export default function ImageCarousel({
+  images,
+  aspectRatio = '4/3',
+  objectFit = 'cover',
+  showDots = 'always',
+  avoidTopRight = false,
+}: ImageCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
@@ -58,6 +66,8 @@ export default function ImageCarousel({ images, aspectRatio = '4/3', objectFit =
   const goToSlide = (index: number) => {
     setCurrentIndex(index);
   };
+  const shouldShowDots =
+    showDots === 'always' || (showDots === 'mobile' && isMobile);
 
   // Single image - no carousel needed
   if (images.length <= 1) {
@@ -120,23 +130,25 @@ export default function ImageCarousel({ images, aspectRatio = '4/3', objectFit =
       )}
 
       {/* Dots indicator */}
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
-        {images.map((_, i) => (
-          <button
-            key={i}
-            onClick={(e) => { e.stopPropagation(); goToSlide(i); }}
-            className={`transition-all rounded-full ${
-              i === currentIndex
-                ? 'w-6 h-1.5 bg-white'
-                : 'w-1.5 h-1.5 bg-white/60 hover:bg-white/80'
-            }`}
-            aria-label={`Go to slide ${i + 1}`}
-          />
-        ))}
-      </div>
+      {shouldShowDots && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+          {images.map((_, i) => (
+            <button
+              key={i}
+              onClick={(e) => { e.stopPropagation(); goToSlide(i); }}
+              className={`transition-all rounded-full ${
+                i === currentIndex
+                  ? 'w-6 h-1.5 bg-white'
+                  : 'w-1.5 h-1.5 bg-white/60 hover:bg-white/80'
+              }`}
+              aria-label={`Go to slide ${i + 1}`}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Image counter (top right) */}
-      <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm text-white text-xs font-medium z-10">
+      <div className={`absolute top-3 ${avoidTopRight ? 'right-14 md:right-3' : 'right-3'} px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm text-white text-xs font-medium z-10`}>
         {currentIndex + 1} / {images.length}
       </div>
     </div>

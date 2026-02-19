@@ -492,9 +492,13 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
                 }}
               >
                 {post.mediaType === 'image' && post.images && post.images.length > 1 ? (
-                  <ImageCarousel images={post.images} />
+                  <ImageCarousel images={post.images} objectFit="contain" />
                 ) : (
-                  <MediaItem post={post} videoObjectFit={isShortVideo ? 'contain' : 'cover'} />
+                  <MediaItem
+                    post={post}
+                    videoObjectFit={isShortVideo ? 'contain' : 'cover'}
+                    imageObjectFit={post.mediaType === 'image' ? 'contain' : 'cover'}
+                  />
                 )}
                 {post.is_ai && (
                   <div className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded bg-black/45 text-white backdrop-blur-sm">
