@@ -1,4 +1,5 @@
 const express = require('express');
+const { AtpAgent } = require('@atproto/api');
 const clerkAuth = require('../middleware/clerkAuth');
 const { createAtSessionToken } = require('../middleware/clerkAuth');
 const {
@@ -109,6 +110,71 @@ router.post('/bridge/sync', clerkAuth, async (req, res) => {
     return res.json({ ok: true, stats });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err?.message || 'Bridge sync failed' });
+  }
+});
+
+router.post('/bridge/profile-sync', clerkAuth, async (req, res) => {
+  try {
+    const auth = req.auth || {};
+    const actorDid = String(auth.did || auth.sub || '').trim();
+    const actorHandle = String(auth.handle || auth.username || '').trim();
+    const actor = actorDid || actorHandle;
+    if (!actor) {
+      return res.status(400).json({ ok: false, error: 'Missing actor identity in auth token.' });
+    }
+
+    const agent = new AtpAgent({ service: 'https://public.api.bsky.app' });
+    const profileRes = await agent.app.bsky.actor.getProfile({ actor });
+    const profile = profileRes?.data || {};
+
+    const displayName = String(profile.displayName || profile.handle || actorHandle || actorDid).trim();
+    const blueskyAvatarUrl = String(profile.avatar || '').trim();
+    const aliases = [actorDid, actorHandle, profile.did, profile.handle].map((v) => String(v || '').trim()).filter(Boolean);
+
+    const existing = await User.findOne(
+      { userId: actorDid },
+      { avatarPreference: 1, avatarUrl: 1, manualAvatarUrl: 1, _id: 0 }
+    );
+    const shouldApplyAvatar =
+      !!blueskyAvatarUrl &&
+      (
+        existing?.avatarPreference === 'bluesky' ||
+        !String(existing?.avatarUrl || '').trim()
+      );
+
+    const update = {
+      $setOnInsert: { userId: actorDid },
+      $addToSet: aliases.length > 0 ? { aliases: { $each: aliases } } : undefined,
+      $set: {
+        displayName,
+        ...(blueskyAvatarUrl ? { blueskyAvatarUrl } : {}),
+        ...(shouldApplyAvatar ? { avatarUrl: blueskyAvatarUrl } : {}),
+      },
+    };
+    if (!update.$addToSet) delete update.$addToSet;
+
+    const user = await User.findOneAndUpdate(
+      { userId: actorDid },
+      update,
+      {
+        upsert: true,
+        new: true,
+        projection: { userId: 1, displayName: 1, avatarUrl: 1, blueskyAvatarUrl: 1, avatarPreference: 1, _id: 0 },
+      }
+    );
+
+    return res.json({
+      ok: true,
+      profile: {
+        did: String(profile.did || actorDid),
+        handle: String(profile.handle || actorHandle),
+        displayName,
+        avatarUrl: blueskyAvatarUrl,
+      },
+      user,
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err?.message || 'Profile sync failed' });
   }
 });
 

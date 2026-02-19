@@ -297,7 +297,7 @@ router.post('/me/avatar', clerkAuth, avatarUpload.single('avatar'), async (req, 
 
         await User.findOneAndUpdate(
             { userId },
-            { $set: { avatarUrl } },
+            { $set: { avatarUrl, manualAvatarUrl: avatarUrl, avatarPreference: 'manual' } },
             { upsert: true }
         );
 
@@ -305,6 +305,56 @@ router.post('/me/avatar', clerkAuth, avatarUpload.single('avatar'), async (req, 
     } catch (error) {
         console.error('Avatar upload error:', error);
         res.status(500).json({ error: 'Failed to upload avatar' });
+    }
+});
+
+/**
+ * POST /users/me/avatar-preference
+ * Switch displayed avatar source between Alu-uploaded and Bluesky-synced avatar.
+ */
+router.post('/me/avatar-preference', clerkAuth, async (req, res) => {
+    try {
+        const userId = req.auth.sub;
+        if (!userId) return res.status(400).json({ error: 'Invalid auth user' });
+
+        const source = String(req.body?.source || '').trim().toLowerCase();
+        if (!['manual', 'bluesky'].includes(source)) {
+            return res.status(400).json({ error: "source must be 'manual' or 'bluesky'" });
+        }
+
+        const user = await User.findOne(
+            { userId },
+            { avatarUrl: 1, manualAvatarUrl: 1, blueskyAvatarUrl: 1, avatarPreference: 1, _id: 0 }
+        );
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        const preferredAvatar =
+            source === 'bluesky'
+                ? String(user.blueskyAvatarUrl || '').trim()
+                : String(user.manualAvatarUrl || '').trim();
+
+        if (!preferredAvatar) {
+            return res.status(400).json({
+                error: source === 'bluesky'
+                    ? 'No synced Bluesky avatar yet. Use profile sync first.'
+                    : 'No Alu avatar uploaded yet. Upload an avatar first.',
+            });
+        }
+
+        const updated = await User.findOneAndUpdate(
+            { userId },
+            { $set: { avatarPreference: source, avatarUrl: preferredAvatar } },
+            { new: true, projection: { avatarUrl: 1, avatarPreference: 1, _id: 0 } }
+        );
+
+        res.json({
+            ok: true,
+            avatarUrl: updated?.avatarUrl || '',
+            avatarPreference: updated?.avatarPreference || source,
+        });
+    } catch (error) {
+        console.error('Avatar preference error:', error);
+        res.status(500).json({ error: 'Failed to switch avatar source' });
     }
 });
 
@@ -378,7 +428,19 @@ router.get('/:userId', async (req, res) => {
 
         const user = await User.findOne(
             { userId },
-            { userId: 1, displayName: 1, avatarUrl: 1, bio: 1, isPro: 1, followers: 1, following: 1, _id: 0 }
+            {
+                userId: 1,
+                displayName: 1,
+                avatarUrl: 1,
+                manualAvatarUrl: 1,
+                blueskyAvatarUrl: 1,
+                avatarPreference: 1,
+                bio: 1,
+                isPro: 1,
+                followers: 1,
+                following: 1,
+                _id: 0,
+            }
         );
 
         if (!user) {
@@ -388,7 +450,13 @@ router.get('/:userId', async (req, res) => {
         // Count their public posts
         const latestIdentity = await getLatestPostIdentity(userId);
         const finalDisplayName = user.displayName || latestIdentity.displayName || user.userId;
-        const finalAvatarUrl = user.avatarUrl || latestIdentity.avatarUrl || '';
+        const preferredManualAvatar = String(user.manualAvatarUrl || '').trim();
+        const preferredBlueskyAvatar = String(user.blueskyAvatarUrl || '').trim();
+        const preferredAvatar =
+            user.avatarPreference === 'bluesky'
+                ? preferredBlueskyAvatar
+                : preferredManualAvatar;
+        const finalAvatarUrl = preferredAvatar || user.avatarUrl || latestIdentity.avatarUrl || '';
 
         if (finalDisplayName !== user.displayName || finalAvatarUrl !== user.avatarUrl) {
             await User.updateOne(
@@ -407,6 +475,8 @@ router.get('/:userId', async (req, res) => {
             userId: user.userId,
             displayName: finalDisplayName,
             avatarUrl: finalAvatarUrl,
+            blueskyAvatarUrl: user.blueskyAvatarUrl || '',
+            avatarPreference: user.avatarPreference || 'manual',
             bio: user.bio,
             isPro: user.isPro,
             followersCount: user.followers?.length || 0,

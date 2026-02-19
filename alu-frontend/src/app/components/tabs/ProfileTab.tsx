@@ -122,11 +122,16 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
   const [ownFollowers, setOwnFollowers] = useState<string[]>([]);
   const [ownFollowing, setOwnFollowing] = useState<string[]>([]);
   const [ownServerAvatarUrl, setOwnServerAvatarUrl] = useState('');
+  const [blueskyProfileAvatarUrl, setBlueskyProfileAvatarUrl] = useState('');
+  const [ownServerAvatarPreference, setOwnServerAvatarPreference] = useState<'manual' | 'bluesky'>('manual');
   const [isResettingCache, setIsResettingCache] = useState(false);
   const [cacheResetMessage, setCacheResetMessage] = useState('');
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
   const [bridgeSyncing, setBridgeSyncing] = useState(false);
   const [bridgeMessage, setBridgeMessage] = useState('');
+  const [profileSyncing, setProfileSyncing] = useState(false);
+  const [avatarSwitching, setAvatarSwitching] = useState(false);
+  const [avatarMessage, setAvatarMessage] = useState('');
 
   const backendUrl = BACKEND_URL;
 
@@ -141,6 +146,9 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
         setOwnFollowers(Array.isArray(data.followers) ? data.followers : []);
         setOwnFollowing(Array.isArray(data.following) ? data.following : []);
         setOwnServerAvatarUrl(String(data.avatarUrl || '').trim());
+        setBlueskyProfileAvatarUrl(String(data.blueskyAvatarUrl || '').trim());
+        const pref = String(data.avatarPreference || 'manual').trim().toLowerCase();
+        setOwnServerAvatarPreference(pref === 'bluesky' ? 'bluesky' : 'manual');
       }
     } catch {
     }
@@ -202,6 +210,79 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
       setBridgeMessage('Sync failed.');
     } finally {
       setBridgeSyncing(false);
+    }
+  };
+
+  const syncProfileFromBluesky = async () => {
+    if (!isOwnProfile || profileSyncing) return;
+    setProfileSyncing(true);
+    setAvatarMessage('');
+    try {
+      const token = await getToken();
+      if (!token) {
+        setAvatarMessage('Sign in again to sync profile.');
+        return;
+      }
+      const res = await fetch(`${backendUrl}/atproto/bridge/profile-sync`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAvatarMessage(data?.error || 'Profile sync failed.');
+        return;
+      }
+
+      const syncedAvatar = String(data?.profile?.avatarUrl || data?.user?.blueskyAvatarUrl || '').trim();
+      if (syncedAvatar) setBlueskyProfileAvatarUrl(syncedAvatar);
+      if (data?.user?.avatarUrl) setOwnServerAvatarUrl(String(data.user.avatarUrl || '').trim());
+      const pref = String(data?.user?.avatarPreference || ownServerAvatarPreference).trim().toLowerCase();
+      setOwnServerAvatarPreference(pref === 'bluesky' ? 'bluesky' : 'manual');
+      setOwnAvatarBroken(false);
+      setAvatarMessage('Synced profile from Bluesky.');
+      await refreshOwnConnections();
+    } catch {
+      setAvatarMessage('Profile sync failed.');
+    } finally {
+      setProfileSyncing(false);
+    }
+  };
+
+  const switchAvatarPreference = async (source: 'manual' | 'bluesky') => {
+    if (!isOwnProfile || avatarSwitching) return;
+    setAvatarSwitching(true);
+    setAvatarMessage('');
+    try {
+      const token = await getToken();
+      if (!token) {
+        setAvatarMessage('Sign in again to change avatar source.');
+        return;
+      }
+      const res = await fetch(`${backendUrl}/users/me/avatar-preference`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ source }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAvatarMessage(data?.error || 'Could not switch avatar source.');
+        return;
+      }
+      setOwnServerAvatarPreference(source);
+      if (data?.avatarUrl) setOwnServerAvatarUrl(String(data.avatarUrl || '').trim());
+      setOwnAvatarBroken(false);
+      setAvatarMessage(source === 'bluesky' ? 'Using Bluesky avatar.' : 'Using Alu avatar.');
+      await refreshOwnConnections();
+    } catch {
+      setAvatarMessage('Could not switch avatar source.');
+    } finally {
+      setAvatarSwitching(false);
     }
   };
 
@@ -434,7 +515,12 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
   const otherDisplayName = otherUser?.displayName || 'User';
   const otherAvatarLetter = otherDisplayName[0]?.toUpperCase() || 'U';
   const otherBio = otherUser?.bio || '';
-  const ownAvatarUrl = normalizeAvatarUrl(user?.imageUrl || ownServerAvatarUrl || '');
+  const ownLocalAvatarUrl = normalizeAvatarUrl(user?.imageUrl || '');
+  const ownBlueskyAvatarUrl = normalizeAvatarUrl(blueskyProfileAvatarUrl || '');
+  const ownServerAvatar = normalizeAvatarUrl(ownServerAvatarUrl || '');
+  const ownAvatarUrl = ownServerAvatarPreference === 'bluesky'
+    ? (ownBlueskyAvatarUrl || ownServerAvatar || ownLocalAvatarUrl)
+    : (ownLocalAvatarUrl || ownServerAvatar || ownBlueskyAvatarUrl);
   const otherAvatarUrl = normalizeAvatarUrl(otherUser?.avatarUrl || '');
 
   useEffect(() => {
@@ -443,7 +529,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
 
   useEffect(() => {
     setOwnAvatarBroken(false);
-  }, [user?.imageUrl, ownServerAvatarUrl]);
+  }, [user?.imageUrl, ownServerAvatarUrl, blueskyProfileAvatarUrl, ownServerAvatarPreference]);
 
   useEffect(() => {
     setConnectionBrokenAvatars({});
@@ -781,6 +867,37 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
             >
               {bridgeSyncing ? 'Syncing from Bluesky...' : 'Sync from Bluesky'}
             </button>
+            <button
+              onClick={syncProfileFromBluesky}
+              disabled={profileSyncing}
+              className="w-full mt-2 py-1.5 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors border border-alu-border disabled:opacity-60"
+            >
+              {profileSyncing ? 'Syncing profile...' : 'Sync Profile from Bluesky'}
+            </button>
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={() => switchAvatarPreference('manual')}
+                disabled={avatarSwitching}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-60 ${
+                  ownServerAvatarPreference === 'manual'
+                    ? 'bg-alu-text text-white border-alu-text'
+                    : 'bg-alu-surface text-alu-text border-alu-border hover:bg-alu-border'
+                }`}
+              >
+                Use Alu Avatar
+              </button>
+              <button
+                onClick={() => switchAvatarPreference('bluesky')}
+                disabled={avatarSwitching}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-60 ${
+                  ownServerAvatarPreference === 'bluesky'
+                    ? 'bg-alu-text text-white border-alu-text'
+                    : 'bg-alu-surface text-alu-text border-alu-border hover:bg-alu-border'
+                }`}
+              >
+                Use Bluesky Avatar
+              </button>
+            </div>
             <p className="mt-2 text-xs text-alu-text-tertiary">
               Last sync: {formatBridgeTime(bridgeStatus?.lastSyncedAt || null)}
               {bridgeStatus?.lastStats
@@ -788,6 +905,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
                 : ''}
             </p>
             {bridgeMessage && <p className="mt-1 text-xs text-alu-text-tertiary">{bridgeMessage}</p>}
+            {avatarMessage && <p className="mt-1 text-xs text-alu-text-tertiary">{avatarMessage}</p>}
           </>
         )}
       </div>
