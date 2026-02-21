@@ -14,11 +14,22 @@ function normalizeUrl(input) {
   return value;
 }
 
+function isDirectImageUrl(url) {
+  return /\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(String(url || '').trim());
+}
+
+function isDirectVideoUrl(url) {
+  return /\.(mp4|m3u8|webm|mov)(\?|$)/i.test(String(url || '').trim());
+}
+
 function mediaFromEmbed(embed) {
   if (!embed || typeof embed !== 'object') return null;
+  const embedType = String(embed.$type || '').trim();
 
-  if (embed.$type === 'app.bsky.embed.images#view' && Array.isArray(embed.images) && embed.images.length > 0) {
-    const urls = embed.images.map((img) => normalizeUrl(img?.fullsize)).filter(Boolean);
+  if (embedType.startsWith('app.bsky.embed.images') && Array.isArray(embed.images) && embed.images.length > 0) {
+    const urls = embed.images
+      .map((img) => normalizeUrl(img?.fullsize || img?.thumb || img?.image?.url))
+      .filter(Boolean);
     if (urls.length === 0) return null;
     return {
       mediaType: 'image',
@@ -28,7 +39,7 @@ function mediaFromEmbed(embed) {
     };
   }
 
-  if (embed.$type === 'app.bsky.embed.video#view') {
+  if (embedType.startsWith('app.bsky.embed.video')) {
     const playlist = normalizeUrl(embed.playlist);
     const thumb = normalizeUrl(embed.thumbnail);
     const contentUrl = playlist || thumb;
@@ -41,21 +52,36 @@ function mediaFromEmbed(embed) {
     };
   }
 
-  if (embed.$type === 'app.bsky.embed.external#view') {
+  if (embedType.startsWith('app.bsky.embed.external')) {
     const uri = normalizeUrl(embed.external?.uri);
     const thumb = normalizeUrl(embed.external?.thumb);
-    const url = uri || thumb;
-    if (!url) return null;
-    const looksVideo = /\.(mp4|m3u8|webm|mov)(\?|$)/i.test(url);
+    if (!uri && !thumb) return null;
+
+    // External embeds are often article links with a preview thumbnail.
+    // Prefer thumb for image rendering; only use uri when it is direct media.
+    const directVideo = uri && isDirectVideoUrl(uri) ? uri : '';
+    const directImage = uri && isDirectImageUrl(uri) ? uri : '';
+
+    if (directVideo) {
+      return {
+        mediaType: 'video',
+        contentUrl: directVideo,
+        images: [],
+        thumbnailUrl: thumb,
+      };
+    }
+
+    const imageUrl = thumb || directImage;
+    if (!imageUrl) return null;
     return {
-      mediaType: looksVideo ? 'video' : 'image',
-      contentUrl: url,
-      images: looksVideo ? [] : [url],
+      mediaType: 'image',
+      contentUrl: imageUrl,
+      images: [imageUrl],
       thumbnailUrl: thumb,
     };
   }
 
-  if (embed.$type === 'app.bsky.embed.recordWithMedia#view' && embed.media) {
+  if (embedType.startsWith('app.bsky.embed.recordWithMedia') && embed.media) {
     return mediaFromEmbed(embed.media);
   }
 

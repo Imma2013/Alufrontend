@@ -32,6 +32,8 @@ export default function CreateTab() {
   const [videoJobId, setVideoJobId] = useState<string | null>(null);
   const [videoProgress, setVideoProgress] = useState(0);
   const [videoStep, setVideoStep] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStep, setUploadStep] = useState('');
 
   // Upload state
   const [files, setFiles] = useState<File[]>([]);
@@ -264,6 +266,8 @@ export default function CreateTab() {
     setIsLoading(true);
     setError(null);
     setSuccess(false);
+    setUploadProgress(2);
+    setUploadStep('Preparing upload...');
 
     try {
       const cfgErr = getBackendConfigError();
@@ -283,21 +287,38 @@ export default function CreateTab() {
       formData.append('avatarUrl', avatarUrl);
       if (selectedType !== 'image') formData.append('quality', videoQuality);
 
-      const response = await fetch(
-        `${backendUrl}/upload`,
-        {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` },
-          body: formData,
-        }
-      );
+      const result = await new Promise<any>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${backendUrl}/upload`, true);
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
-      if (!response.ok) {
-        const errMsg = await parseErrorResponse(response, 'Upload failed');
-        throw new Error(errMsg);
-      }
+        xhr.upload.onprogress = (event) => {
+          if (!event.lengthComputable) return;
+          const percent = Math.round((event.loaded / event.total) * 92);
+          setUploadProgress(Math.max(3, Math.min(percent, 92)));
+          setUploadStep('Uploading content...');
+        };
 
-      const result = await response.json();
+        xhr.onerror = () => reject(new Error('Upload failed. Network error.'));
+        xhr.onload = () => {
+          const status = xhr.status || 0;
+          let data: any = {};
+          try {
+            data = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+          } catch {
+          }
+          if (status < 200 || status >= 300) {
+            reject(new Error(data?.error || data?.message || `Upload failed (${status})`));
+            return;
+          }
+          resolve(data);
+        };
+
+        xhr.send(formData);
+      });
+
+      setUploadProgress(96);
+      setUploadStep('Finalizing post...');
 
       if (result.post) {
         if (selectedType === 'image' && files.length > 1) {
@@ -325,10 +346,13 @@ export default function CreateTab() {
         clearFile();
         setCaption('');
         setIsAI(false);
+        setUploadProgress(100);
+        setUploadStep('Upload complete.');
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Upload failed';
       setError(message);
+      setUploadStep('Upload failed.');
     } finally {
       setIsLoading(false);
     }
@@ -637,6 +661,26 @@ export default function CreateTab() {
             />
           </div>
           <p className="text-[11px] text-alu-text-tertiary mt-2">{videoStep}</p>
+        </div>
+      )}
+
+      {/* Upload Progress */}
+      {mode === 'upload' && isLoading && (
+        <div className="mb-6 p-4 rounded-xl border border-[var(--alu-primary)]/25 bg-gradient-to-r from-[var(--alu-primary-glow)] to-white animate-fade-in">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs font-semibold text-alu-text">Uploading Content</span>
+            <span className="text-xs font-bold text-[var(--alu-primary-dark)]">{uploadProgress}%</span>
+          </div>
+          <div className="w-full h-2.5 bg-white/80 border border-[var(--alu-primary)]/20 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-300 ease-out"
+              style={{
+                width: `${uploadProgress}%`,
+                background: 'linear-gradient(90deg, var(--alu-primary-dark), var(--alu-primary), var(--alu-primary-light))',
+              }}
+            />
+          </div>
+          <p className="text-[11px] text-alu-text-secondary mt-2">{uploadStep || 'Working...'}</p>
         </div>
       )}
 

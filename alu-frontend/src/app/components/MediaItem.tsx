@@ -24,6 +24,17 @@ export default function MediaItem({
 }: MediaItemProps) {
   const [localUrl, setLocalUrl] = useState<string | null>(null);
   const [isRemote, setIsRemote] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+  const [videoFailed, setVideoFailed] = useState(false);
+
+  const fallbackImage = Array.isArray(post.images) && post.images.length > 0
+    ? String(post.images[0] || '').trim()
+    : '';
+
+  useEffect(() => {
+    setImageFailed(false);
+    setVideoFailed(false);
+  }, [post._id, post.contentUrl, fallbackImage]);
 
   useEffect(() => {
     let isMounted = true;
@@ -61,7 +72,7 @@ export default function MediaItem({
   // Check for multi-image carousel
   const hasMultipleImages = post.images && post.images.length > 1;
 
-  if (!localUrl && !hasMultipleImages) {
+  if (!localUrl && !hasMultipleImages && !fallbackImage) {
     return <div className="w-full h-full bg-[var(--alu-surface)] animate-pulse rounded-lg"></div>;
   }
 
@@ -74,17 +85,36 @@ export default function MediaItem({
   return (
     <>
       {post.mediaType === 'image' ? (
-        <img src={localUrl || ''} alt={post.safePrompt} className={`${imageObjectFit === 'contain' ? 'object-contain bg-black' : 'object-cover'} w-full h-full`} />
-      ) : (
-        <video
-          src={localUrl || ''}
-          controls={videoControls}
-          autoPlay={autoPlayVideo}
-          loop={autoPlayVideo}
-          muted={mutedVideo}
-          playsInline
-          className={`${videoObjectFit === 'contain' ? 'object-contain' : 'object-cover'} w-full h-full`}
+        <img
+          src={imageFailed ? (fallbackImage || '') : (localUrl || fallbackImage || '')}
+          alt={post.safePrompt}
+          className={`${imageObjectFit === 'contain' ? 'object-contain bg-black' : 'object-cover'} w-full h-full`}
+          onError={() => {
+            if (!imageFailed && fallbackImage && localUrl !== fallbackImage) {
+              setImageFailed(true);
+            }
+          }}
         />
+      ) : (
+        videoFailed ? (
+          <img
+            src={post.thumbnailUrl || fallbackImage || ''}
+            alt={post.safePrompt}
+            className={`${videoObjectFit === 'contain' ? 'object-contain bg-black' : 'object-cover'} w-full h-full`}
+          />
+        ) : (
+          <video
+            src={localUrl || ''}
+            controls={videoControls}
+            autoPlay={autoPlayVideo}
+            loop={autoPlayVideo}
+            muted={mutedVideo}
+            playsInline
+            poster={post.thumbnailUrl || undefined}
+            className={`${videoObjectFit === 'contain' ? 'object-contain' : 'object-cover'} w-full h-full`}
+            onError={() => setVideoFailed(true)}
+          />
+        )
       )}
     </>
   );

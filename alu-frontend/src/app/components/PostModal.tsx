@@ -58,6 +58,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
   const [deleting, setDeleting] = useState(false);
   const [actionError, setActionError] = useState('');
   const [mediaLoaded, setMediaLoaded] = useState(false);
+  const [primaryImageFailed, setPrimaryImageFailed] = useState(false);
   const [mounted, setMounted] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
@@ -80,10 +81,18 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
     } else {
       setMediaLoaded(false);
     }
+    setPrimaryImageFailed(false);
     if (modalContentRef.current) {
       modalContentRef.current.scrollTop = 0;
     }
   }, [post._id, post.mediaType, post.images]);
+
+  const fallbackSingleImage = Array.isArray(post.images) && post.images.length > 0
+    ? String(post.images[0] || '').trim()
+    : '';
+  const primarySingleImage = primaryImageFailed
+    ? (fallbackSingleImage || '')
+    : (post.contentUrl || fallbackSingleImage || '');
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -578,11 +587,17 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
                 </div>
               ) : (
                 <img
-                  src={post.contentUrl}
+                  src={primarySingleImage}
                   alt={post.safePrompt}
                   className="object-cover w-full h-full"
                   onLoad={() => setMediaLoaded(true)}
-                  onError={() => setMediaLoaded(true)}
+                  onError={() => {
+                    if (!primaryImageFailed && fallbackSingleImage && post.contentUrl !== fallbackSingleImage) {
+                      setPrimaryImageFailed(true);
+                      return;
+                    }
+                    setMediaLoaded(true);
+                  }}
                 />
               )}
             </div>
