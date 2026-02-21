@@ -22,7 +22,6 @@ export default function EditProfile({ onBack }: EditProfileProps) {
     const [manualAvatarUrl, setManualAvatarUrl] = useState('');
     const [blueskyAvatarUrl, setBlueskyAvatarUrl] = useState('');
     const [avatarPreference, setAvatarPreference] = useState<'manual' | 'bluesky'>('manual');
-    const [syncingProfile, setSyncingProfile] = useState(false);
     const [switchingAvatar, setSwitchingAvatar] = useState(false);
     const [avatarMessage, setAvatarMessage] = useState('');
     const [avatarBroken, setAvatarBroken] = useState(false);
@@ -50,32 +49,6 @@ export default function EditProfile({ onBack }: EditProfileProps) {
     useEffect(() => {
         void refreshServerProfile();
     }, [user?.id]);
-
-    const syncProfileFromBluesky = async () => {
-        setSyncingProfile(true);
-        setError(null);
-        setAvatarMessage('');
-        try {
-            const token = await getToken();
-            if (!token) throw new Error('Sign in again to sync profile.');
-            const res = await fetch(`${BACKEND_URL}/atproto/bridge/profile-sync`, {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data?.error || 'Profile sync failed.');
-            setAvatarMessage('Synced profile from Bluesky.');
-            await refreshServerProfile();
-        } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : 'Profile sync failed.';
-            setError(message);
-        } finally {
-            setSyncingProfile(false);
-        }
-    };
 
     const switchAvatarSource = async (source: 'manual' | 'bluesky') => {
         setSwitchingAvatar(true);
@@ -233,14 +206,7 @@ export default function EditProfile({ onBack }: EditProfileProps) {
 
                 <div className="mb-6 rounded-xl border border-alu-border p-3 bg-white">
                     <p className="text-xs font-semibold text-alu-text-secondary mb-2">Bluesky Profile</p>
-                    <button
-                        onClick={syncProfileFromBluesky}
-                        disabled={syncingProfile}
-                        className="w-full py-2 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border border border-alu-border disabled:opacity-60"
-                    >
-                        {syncingProfile ? 'Syncing profile...' : 'Sync Profile from Bluesky'}
-                    </button>
-                    <div className="mt-2 flex gap-2">
+                    <div className="flex gap-2">
                         <button
                             onClick={() => switchAvatarSource('manual')}
                             disabled={switchingAvatar}

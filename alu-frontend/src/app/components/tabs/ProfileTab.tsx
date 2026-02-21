@@ -858,6 +858,18 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
             </>
           )}
         </div>
+        {isOwnProfile && (
+          <>
+            <button
+              onClick={syncProfileFromBluesky}
+              disabled={profileSyncing}
+              className="w-full mt-2 py-1.5 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors border border-alu-border disabled:opacity-60"
+            >
+              {profileSyncing ? 'Syncing profile...' : 'Sync Profile from Bluesky'}
+            </button>
+            {avatarMessage && <p className="mt-1 text-xs text-alu-text-tertiary">{avatarMessage}</p>}
+          </>
+        )}
       </div>
 
       {/* Settings dropdown (own profile only) */}
