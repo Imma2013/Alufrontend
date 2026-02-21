@@ -858,56 +858,6 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
             </>
           )}
         </div>
-        {isOwnProfile && (
-          <>
-            <button
-              onClick={runBridgeSync}
-              disabled={bridgeSyncing}
-              className="w-full mt-2 py-1.5 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors border border-alu-border disabled:opacity-60"
-            >
-              {bridgeSyncing ? 'Syncing from Bluesky...' : 'Sync from Bluesky'}
-            </button>
-            <button
-              onClick={syncProfileFromBluesky}
-              disabled={profileSyncing}
-              className="w-full mt-2 py-1.5 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border transition-colors border border-alu-border disabled:opacity-60"
-            >
-              {profileSyncing ? 'Syncing profile...' : 'Sync Profile from Bluesky'}
-            </button>
-            <div className="mt-2 flex gap-2">
-              <button
-                onClick={() => switchAvatarPreference('manual')}
-                disabled={avatarSwitching}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-60 ${
-                  ownServerAvatarPreference === 'manual'
-                    ? 'bg-alu-text text-white border-alu-text'
-                    : 'bg-alu-surface text-alu-text border-alu-border hover:bg-alu-border'
-                }`}
-              >
-                Use Alu Avatar
-              </button>
-              <button
-                onClick={() => switchAvatarPreference('bluesky')}
-                disabled={avatarSwitching}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-60 ${
-                  ownServerAvatarPreference === 'bluesky'
-                    ? 'bg-alu-text text-white border-alu-text'
-                    : 'bg-alu-surface text-alu-text border-alu-border hover:bg-alu-border'
-                }`}
-              >
-                Use Bluesky Avatar
-              </button>
-            </div>
-            <p className="mt-2 text-xs text-alu-text-tertiary">
-              Last sync: {formatBridgeTime(bridgeStatus?.lastSyncedAt || null)}
-              {bridgeStatus?.lastStats
-                ? ` • +${Number(bridgeStatus.lastStats.follows?.added || 0)} follows • ${Number(bridgeStatus.lastStats.posts?.imported || 0)} imported • ${Number(bridgeStatus.lastStats.posts?.updated || 0)} updated`
-                : ''}
-            </p>
-            {bridgeMessage && <p className="mt-1 text-xs text-alu-text-tertiary">{bridgeMessage}</p>}
-            {avatarMessage && <p className="mt-1 text-xs text-alu-text-tertiary">{avatarMessage}</p>}
-          </>
-        )}
       </div>
 
       {/* Settings dropdown (own profile only) */}

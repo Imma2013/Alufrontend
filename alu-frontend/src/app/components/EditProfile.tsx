@@ -1,7 +1,7 @@
 'use client';
 
 import { BACKEND_URL } from '@/app/lib/backend';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useUser } from '../lib/auth';
 import { useAuth } from '../lib/auth';
 
@@ -18,7 +18,94 @@ export default function EditProfile({ onBack }: EditProfileProps) {
     const [error, setError] = useState<string | null>(null);
     const [profileImage, setProfileImage] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [currentAvatarUrl, setCurrentAvatarUrl] = useState('');
+    const [manualAvatarUrl, setManualAvatarUrl] = useState('');
+    const [blueskyAvatarUrl, setBlueskyAvatarUrl] = useState('');
+    const [avatarPreference, setAvatarPreference] = useState<'manual' | 'bluesky'>('manual');
+    const [syncingProfile, setSyncingProfile] = useState(false);
+    const [switchingAvatar, setSwitchingAvatar] = useState(false);
+    const [avatarMessage, setAvatarMessage] = useState('');
+    const [avatarBroken, setAvatarBroken] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const refreshServerProfile = async () => {
+        if (!user?.id) return;
+        try {
+            const token = await getToken();
+            const res = await fetch(`${BACKEND_URL}/users/${encodeURIComponent(user.id)}`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            setCurrentAvatarUrl(String(data?.avatarUrl || '').trim());
+            setManualAvatarUrl(String(data?.manualAvatarUrl || '').trim());
+            setBlueskyAvatarUrl(String(data?.blueskyAvatarUrl || '').trim());
+            const pref = String(data?.avatarPreference || 'manual').trim().toLowerCase();
+            setAvatarPreference(pref === 'bluesky' ? 'bluesky' : 'manual');
+            setAvatarBroken(false);
+        } catch {
+        }
+    };
+
+    useEffect(() => {
+        void refreshServerProfile();
+    }, [user?.id]);
+
+    const syncProfileFromBluesky = async () => {
+        setSyncingProfile(true);
+        setError(null);
+        setAvatarMessage('');
+        try {
+            const token = await getToken();
+            if (!token) throw new Error('Sign in again to sync profile.');
+            const res = await fetch(`${BACKEND_URL}/atproto/bridge/profile-sync`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data?.error || 'Profile sync failed.');
+            setAvatarMessage('Synced profile from Bluesky.');
+            await refreshServerProfile();
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Profile sync failed.';
+            setError(message);
+        } finally {
+            setSyncingProfile(false);
+        }
+    };
+
+    const switchAvatarSource = async (source: 'manual' | 'bluesky') => {
+        setSwitchingAvatar(true);
+        setError(null);
+        setAvatarMessage('');
+        try {
+            const token = await getToken();
+            if (!token) throw new Error('Sign in again to change avatar source.');
+            const res = await fetch(`${BACKEND_URL}/users/me/avatar-preference`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ source }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data?.error || 'Could not switch avatar source.');
+            setAvatarPreference(source);
+            if (data?.avatarUrl) setCurrentAvatarUrl(String(data.avatarUrl || '').trim());
+            setAvatarBroken(false);
+            setAvatarMessage(source === 'bluesky' ? 'Using Bluesky avatar.' : 'Using Alu avatar.');
+            await refreshServerProfile();
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Could not switch avatar source.';
+            setError(message);
+        } finally {
+            setSwitchingAvatar(false);
+        }
+    };
 
     const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -53,6 +140,7 @@ export default function EditProfile({ onBack }: EditProfileProps) {
             // Update profile image
             if (profileImage) {
                 await user.setProfileImage({ file: profileImage });
+                setAvatarMessage('Alu avatar updated.');
             }
 
             // Sync latest display/avatar into backend directory for search/feed rendering.
@@ -67,6 +155,8 @@ export default function EditProfile({ onBack }: EditProfileProps) {
             } catch {
             }
 
+            await refreshServerProfile();
+
             onBack();
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Failed to save profile';
@@ -75,6 +165,17 @@ export default function EditProfile({ onBack }: EditProfileProps) {
             setIsSaving(false);
         }
     };
+
+    const normalizedPreview = String(imagePreview || '').trim();
+    const normalizedCurrentAvatar = String(currentAvatarUrl || '').trim();
+    const normalizedManualAvatar = String(manualAvatarUrl || '').trim();
+    const normalizedBlueskyAvatar = String(blueskyAvatarUrl || '').trim();
+    const normalizedStoredAvatar = String(user?.imageUrl || '').trim();
+    const preferredAvatar =
+        avatarPreference === 'bluesky'
+            ? (normalizedBlueskyAvatar || normalizedManualAvatar)
+            : (normalizedManualAvatar || normalizedBlueskyAvatar);
+    const avatarToRender = normalizedPreview || preferredAvatar || normalizedCurrentAvatar || normalizedStoredAvatar;
 
     return (
         <div className="fixed inset-0 z-[100] bg-[var(--alu-bg)] animate-slide-up overflow-y-auto">
@@ -102,11 +203,12 @@ export default function EditProfile({ onBack }: EditProfileProps) {
                 {/* Profile Picture */}
                 <div className="flex flex-col items-center mb-8">
                     <div className="w-24 h-24 rounded-full bg-alu-surface overflow-hidden mb-3 relative">
-                        {imagePreview || user?.imageUrl ? (
+                        {avatarToRender && !avatarBroken ? (
                             <img
-                                src={imagePreview || user?.imageUrl}
+                                src={avatarToRender}
                                 alt="Profile"
                                 className="w-full h-full object-cover"
+                                onError={() => setAvatarBroken(true)}
                             />
                         ) : (
                             <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-alu-text-secondary">
@@ -127,6 +229,42 @@ export default function EditProfile({ onBack }: EditProfileProps) {
                     >
                         Change Photo
                     </button>
+                </div>
+
+                <div className="mb-6 rounded-xl border border-alu-border p-3 bg-white">
+                    <p className="text-xs font-semibold text-alu-text-secondary mb-2">Bluesky Profile</p>
+                    <button
+                        onClick={syncProfileFromBluesky}
+                        disabled={syncingProfile}
+                        className="w-full py-2 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text hover:bg-alu-border border border-alu-border disabled:opacity-60"
+                    >
+                        {syncingProfile ? 'Syncing profile...' : 'Sync Profile from Bluesky'}
+                    </button>
+                    <div className="mt-2 flex gap-2">
+                        <button
+                            onClick={() => switchAvatarSource('manual')}
+                            disabled={switchingAvatar}
+                            className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-60 ${
+                                avatarPreference === 'manual'
+                                    ? 'bg-alu-text text-white border-alu-text'
+                                    : 'bg-alu-surface text-alu-text border-alu-border hover:bg-alu-border'
+                            }`}
+                        >
+                            Use Alu Avatar
+                        </button>
+                        <button
+                            onClick={() => switchAvatarSource('bluesky')}
+                            disabled={switchingAvatar || !blueskyAvatarUrl}
+                            className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-60 ${
+                                avatarPreference === 'bluesky'
+                                    ? 'bg-alu-text text-white border-alu-text'
+                                    : 'bg-alu-surface text-alu-text border-alu-border hover:bg-alu-border'
+                            }`}
+                        >
+                            Use Bluesky Avatar
+                        </button>
+                    </div>
+                    {avatarMessage && <p className="text-[11px] text-alu-text-tertiary mt-2">{avatarMessage}</p>}
                 </div>
 
                 {/* Display Name */}

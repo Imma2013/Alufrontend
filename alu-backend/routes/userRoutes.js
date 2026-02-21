@@ -454,8 +454,8 @@ router.get('/:userId', async (req, res) => {
         const preferredBlueskyAvatar = String(user.blueskyAvatarUrl || '').trim();
         const preferredAvatar =
             user.avatarPreference === 'bluesky'
-                ? preferredBlueskyAvatar
-                : preferredManualAvatar;
+                ? (preferredBlueskyAvatar || preferredManualAvatar)
+                : (preferredManualAvatar || preferredBlueskyAvatar);
         const finalAvatarUrl = preferredAvatar || user.avatarUrl || latestIdentity.avatarUrl || '';
 
         if (finalDisplayName !== user.displayName || finalAvatarUrl !== user.avatarUrl) {
@@ -475,6 +475,7 @@ router.get('/:userId', async (req, res) => {
             userId: user.userId,
             displayName: finalDisplayName,
             avatarUrl: finalAvatarUrl,
+            manualAvatarUrl: user.manualAvatarUrl || '',
             blueskyAvatarUrl: user.blueskyAvatarUrl || '',
             avatarPreference: user.avatarPreference || 'manual',
             bio: user.bio,
