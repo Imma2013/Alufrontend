@@ -8,6 +8,12 @@ function normalizeHandle(raw: string): { normalized: string; bskyHandle: string 
   return { normalized, bskyHandle };
 }
 
+export function getBlueskyProfileUrl(handle: string): string {
+  const { normalized, bskyHandle } = normalizeHandle(handle);
+  if (!normalized) return '';
+  return `https://bsky.app/profile/${bskyHandle}`;
+}
+
 export async function resolveMentionUserId(handle: string, getToken: TokenProvider): Promise<string> {
   const { normalized, bskyHandle } = normalizeHandle(handle);
   if (!normalized) return '';

@@ -10,7 +10,7 @@ import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon, MoreVertIcon } from '.
 import ImageCarousel from './ImageCarousel';
 import MentionText from './MentionText';
 import { getPostShareUrl } from '@/app/lib/publicUrl';
-import { resolveMentionUserId } from '@/app/lib/mentions';
+import { getBlueskyProfileUrl, resolveMentionUserId } from '@/app/lib/mentions';
 
 interface CommentData {
   _id: string;
@@ -224,11 +224,16 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
   };
 
   const resolveMentionAndView = async (handle: string) => {
-    if (!handle || !onViewUser) return;
+    if (!handle) return;
     const targetId = await resolveMentionUserId(handle, getToken);
-    if (targetId) {
+    if (targetId && onViewUser) {
       onViewUser(targetId);
       onClose();
+      return;
+    }
+    const blueskyUrl = getBlueskyProfileUrl(handle);
+    if (blueskyUrl && typeof window !== 'undefined') {
+      window.location.assign(blueskyUrl);
     }
   };
 

@@ -2,7 +2,7 @@
 
 import { BACKEND_URL } from '@/app/lib/backend';
 import { getPostShareUrl } from '@/app/lib/publicUrl';
-import { resolveMentionUserId } from '@/app/lib/mentions';
+import { getBlueskyProfileUrl, resolveMentionUserId } from '@/app/lib/mentions';
 
 import { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -184,7 +184,14 @@ export default function HomeTab({ showAI, showNormal, searchQuery = '', onViewUs
   const resolveMentionAndView = async (handle: string) => {
     if (!handle || !onViewUser) return;
     const targetId = await resolveMentionUserId(handle, getToken);
-    if (targetId) onViewUser(targetId);
+    if (targetId) {
+      onViewUser(targetId);
+      return;
+    }
+    const blueskyUrl = getBlueskyProfileUrl(handle);
+    if (blueskyUrl && typeof window !== 'undefined') {
+      window.location.assign(blueskyUrl);
+    }
   };
 
   const getPostKey = (post: Post) => post._id;
