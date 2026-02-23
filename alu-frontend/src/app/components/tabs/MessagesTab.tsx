@@ -275,10 +275,24 @@ export default function MessagesTab({ launchRequest, onLaunchHandled, onViewUser
     });
   }, [normalizedSearch, sortedThreads]);
 
+  const markThreadRead = useCallback(async (threadId: string) => {
+    if (!threadId) return;
+    await db.dmThreads.update(threadId, { unreadCount: 0 });
+    try {
+      const token = await getToken();
+      if (!token) return;
+      await fetch(`${backendUrl}/dm/threads/${threadId}/read`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
+    }
+  }, [backendUrl, getToken]);
+
   const openThread = useCallback(async (threadId: string) => {
     setActiveThreadId(threadId);
-    await db.dmThreads.update(threadId, { unreadCount: 0 });
-  }, []);
+    await markThreadRead(threadId);
+  }, [markThreadRead]);
 
   const startThreadWithUser = useCallback(async (person: UserResult) => {
     if (!myUserId) return;
@@ -337,6 +351,13 @@ export default function MessagesTab({ launchRequest, onLaunchHandled, onViewUser
       onLaunchHandled?.();
     });
   }, [launchRequest, myUserId, onLaunchHandled, startThreadWithUser]);
+
+  useEffect(() => {
+    if (!activeThreadId) return;
+    const active = (threads || []).find((thread) => thread._id === activeThreadId);
+    if (!active || Number(active.unreadCount || 0) <= 0) return;
+    void markThreadRead(activeThreadId);
+  }, [activeThreadId, threads, markThreadRead]);
 
   const uploadImageToCloudinary = async (file: File): Promise<string> => {
     const formData = new FormData();

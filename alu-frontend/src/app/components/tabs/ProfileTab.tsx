@@ -106,6 +106,7 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
   const [otherUser, setOtherUser] = useState<OtherUserProfile | null>(null);
   const [otherUserPosts, setOtherUserPosts] = useState<Post[]>([]);
   const [loadingProfile, setLoadingProfile] = useState(false);
+  const [profileUnavailable, setProfileUnavailable] = useState(false);
 
   // Favorites state
   const [favoritePosts, setFavoritePosts] = useState<Post[]>([]);
@@ -297,10 +298,12 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
     if (isOwnProfile || !viewUserId) {
       setOtherUser(null);
       setOtherUserPosts([]);
+      setProfileUnavailable(false);
       return;
     }
 
     setLoadingProfile(true);
+    setProfileUnavailable(false);
     setActiveContentTab('posts');
 
     Promise.all([
@@ -320,11 +323,18 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
         setFollowersCount(profileData.followersCount || 0);
         setFollowingCount(profileData.followingCount || 0);
         setIsFollowing(profileData.followers?.includes(userId || '') || false);
+        const userPosts = (syncData.changes || [])
+          .filter((p: Post) => p.userId === viewUserId)
+          .sort((a: Post, b: Post) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        setOtherUserPosts(userPosts);
+      } else {
+        setOtherUser(null);
+        setOtherUserPosts([]);
+        setFollowersCount(0);
+        setFollowingCount(0);
+        setIsFollowing(false);
+        setProfileUnavailable(true);
       }
-      const userPosts = (syncData.changes || [])
-        .filter((p: Post) => p.userId === viewUserId)
-        .sort((a: Post, b: Post) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      setOtherUserPosts(userPosts);
     }).finally(() => setLoadingProfile(false));
   }, [viewUserId, isOwnProfile, userId, backendUrl]);
 
@@ -715,6 +725,24 @@ export default function ProfileTab({ viewUserId, onBack, onViewUser, onMessageUs
         <div className="py-20 text-center">
           <div className="w-8 h-8 border-2 border-[var(--alu-primary)] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
           <p className="text-sm text-alu-text-tertiary">Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
+  if (!isOwnProfile && profileUnavailable) {
+    return (
+      <div className="w-full max-w-[600px] mx-auto animate-fade-in">
+        <div className="py-16 text-center px-6">
+          <p className="text-sm font-semibold text-alu-text mb-1">Profile unavailable</p>
+          <p className="text-xs text-alu-text-tertiary mb-4">
+            This Bluesky account is not on Alu yet.
+          </p>
+          <button
+            onClick={onBack}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-alu-surface text-alu-text border border-alu-border hover:bg-alu-border transition-colors"
+          >
+            Go Back
+          </button>
         </div>
       </div>
     );

@@ -10,6 +10,7 @@ import { HeartIcon, CommentIcon, ShareIcon, BookmarkIcon, MoreVertIcon } from '.
 import ImageCarousel from './ImageCarousel';
 import MentionText from './MentionText';
 import { getPostShareUrl } from '@/app/lib/publicUrl';
+import { resolveMentionUserId } from '@/app/lib/mentions';
 
 interface CommentData {
   _id: string;
@@ -23,11 +24,6 @@ interface CommentData {
   imageUrl?: string;
   replyCount?: number;
   replies?: CommentData[];
-}
-
-interface MentionSearchUser {
-  userId: string;
-  displayName?: string;
 }
 
 interface PostModalProps {
@@ -229,21 +225,10 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
 
   const resolveMentionAndView = async (handle: string) => {
     if (!handle || !onViewUser) return;
-    try {
-      const token = await getToken();
-      const res = await fetch(`${backendUrl}/users/search?q=${encodeURIComponent(handle)}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const users: MentionSearchUser[] = Array.isArray(data.users) ? data.users : [];
-      const exact = users.find((u) => (u.displayName || '').toLowerCase() === handle.toLowerCase());
-      const target = exact || users[0];
-      if (target?.userId) {
-        onViewUser(target.userId);
-        onClose();
-      }
-    } catch {
+    const targetId = await resolveMentionUserId(handle, getToken);
+    if (targetId) {
+      onViewUser(targetId);
+      onClose();
     }
   };
 

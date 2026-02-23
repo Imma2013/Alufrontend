@@ -6,8 +6,8 @@ interface MentionTextProps {
   onMentionClick?: (handle: string) => void;
 }
 
-const MENTION_RE = /(@[a-zA-Z0-9._]{2,30})/g;
-const MENTION_TOKEN_RE = /^@[a-zA-Z0-9._]{2,30}$/;
+const MENTION_RE = /(@[a-zA-Z0-9._-]{2,64})/g;
+const MENTION_TOKEN_RE = /^@[a-zA-Z0-9._-]{2,64}$/;
 
 export default function MentionText({ text, className = '', onMentionClick }: MentionTextProps) {
   const parts = String(text || '').split(MENTION_RE);

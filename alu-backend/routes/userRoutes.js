@@ -46,6 +46,50 @@ const toAliasCandidates = (claims) => {
     return Array.from(aliases);
 };
 
+const HANDLE_RESOLVE_TTL_MS = 30 * 1000;
+const HANDLE_RESOLVE_MAX_ENTRIES = 1000;
+const handleResolveCache = new Map();
+
+const nowMs = () => Date.now();
+
+const cacheGetHandleResolution = (key) => {
+    const entry = handleResolveCache.get(key);
+    if (!entry) return null;
+    if (entry.expiresAt <= nowMs()) {
+        handleResolveCache.delete(key);
+        return null;
+    }
+    return entry.value;
+};
+
+const cacheSetHandleResolution = (key, value) => {
+    if (handleResolveCache.size >= HANDLE_RESOLVE_MAX_ENTRIES) {
+        const firstKey = handleResolveCache.keys().next().value;
+        if (firstKey) handleResolveCache.delete(firstKey);
+    }
+    handleResolveCache.set(key, {
+        value,
+        expiresAt: nowMs() + HANDLE_RESOLVE_TTL_MS,
+    });
+};
+
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const normalizeHandle = (value) => String(value || '').trim().toLowerCase().replace(/^@+/, '');
+
+const handleCandidates = (raw) => {
+    const normalized = normalizeHandle(raw);
+    if (!normalized) return [];
+    const set = new Set([normalized]);
+    if (!normalized.includes('.')) {
+        set.add(`${normalized}.bsky.social`);
+    }
+    if (normalized.endsWith('.bsky.social')) {
+        set.add(normalized.replace(/\.bsky\.social$/, ''));
+    }
+    return Array.from(set);
+};
+
 /**
  * GET /users/search?q=name
  * Search users by displayName (case-insensitive regex)
@@ -56,43 +100,22 @@ router.get('/search', async (req, res) => {
         if (!q || q.trim().length < 1) {
             return res.json({ users: [] });
         }
+        const includeExternal = String(req.query?.includeExternal || '').trim() === '1';
 
         // Escape regex special chars for safety
         const trimmed = q.trim();
         const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const pattern = new RegExp(escaped, 'i');
-
         const users = await User.find(
             {
+                ...(includeExternal ? {} : { isPlatformUser: true }),
                 $or: [
                     { displayName: { $regex: escaped, $options: 'i' } },
                     { userId: { $regex: escaped, $options: 'i' } },
+                    { aliases: { $regex: escaped, $options: 'i' } },
                 ],
             },
-            { userId: 1, displayName: 1, avatarUrl: 1, bio: 1, _id: 0 }
+            { userId: 1, displayName: 1, avatarUrl: 1, bio: 1, aliases: 1, _id: 0 }
         ).limit(20);
-
-        // Fallback: include creators that only exist in posts (not yet in users collection)
-        // and also match by userId handle. This improves DM search reliability.
-        const postAuthors = await Post.aggregate([
-            {
-                $match: {
-                    $or: [
-                        { displayName: pattern },
-                        { userId: pattern },
-                    ],
-                },
-            },
-            { $sort: { createdAt: -1 } },
-            {
-                $group: {
-                    _id: '$userId',
-                    displayName: { $first: '$displayName' },
-                    avatarUrl: { $first: '$avatarUrl' },
-                },
-            },
-            { $limit: 40 },
-        ]);
 
         const merged = new Map();
         for (const u of users) {
@@ -101,27 +124,7 @@ router.get('/search', async (req, res) => {
                 displayName: u.displayName || '',
                 avatarUrl: u.avatarUrl || '',
                 bio: u.bio || '',
-            });
-        }
-
-        for (const a of postAuthors) {
-            const userId = String(a._id || '');
-            if (!userId) continue;
-            if (merged.has(userId)) {
-                const existing = merged.get(userId);
-                merged.set(userId, {
-                    ...existing,
-                    displayName: existing.displayName || a.displayName || userId,
-                    avatarUrl: existing.avatarUrl || a.avatarUrl || '',
-                });
-                continue;
-            }
-
-            merged.set(userId, {
-                userId,
-                displayName: a.displayName || userId,
-                avatarUrl: a.avatarUrl || '',
-                bio: '',
+                aliases: Array.isArray(u.aliases) ? u.aliases : [],
             });
         }
 
@@ -129,23 +132,97 @@ router.get('/search', async (req, res) => {
             .sort((a, b) => {
                 const aName = (a.displayName || '').toLowerCase();
                 const bName = (b.displayName || '').toLowerCase();
+                const aUser = String(a.userId || '').toLowerCase();
+                const bUser = String(b.userId || '').toLowerCase();
+                const aAliases = Array.isArray(a.aliases) ? a.aliases.map((v) => String(v || '').toLowerCase()) : [];
+                const bAliases = Array.isArray(b.aliases) ? b.aliases.map((v) => String(v || '').toLowerCase()) : [];
                 const query = trimmed.toLowerCase();
-                const aExact = aName === query || a.userId.toLowerCase() === query;
-                const bExact = bName === query || b.userId.toLowerCase() === query;
+                const queryNoAt = query.startsWith('@') ? query.slice(1) : query;
+                const queryBsky = queryNoAt.includes('.') ? queryNoAt : `${queryNoAt}.bsky.social`;
+                const aExact = aName === query || aUser === query || aAliases.includes(query) || aAliases.includes(queryNoAt) || aAliases.includes(queryBsky);
+                const bExact = bName === query || bUser === query || bAliases.includes(query) || bAliases.includes(queryNoAt) || bAliases.includes(queryBsky);
                 if (aExact && !bExact) return -1;
                 if (!aExact && bExact) return 1;
-                const aStarts = aName.startsWith(query) || a.userId.toLowerCase().startsWith(query);
-                const bStarts = bName.startsWith(query) || b.userId.toLowerCase().startsWith(query);
+                const aStarts = aName.startsWith(query) || aUser.startsWith(query) || aAliases.some((v) => v.startsWith(queryNoAt));
+                const bStarts = bName.startsWith(query) || bUser.startsWith(query) || bAliases.some((v) => v.startsWith(queryNoAt));
                 if (aStarts && !bStarts) return -1;
                 if (!aStarts && bStarts) return 1;
                 return aName.localeCompare(bName);
             })
-            .slice(0, 20);
+            .slice(0, 20)
+            .map(({ aliases, ...user }) => user);
 
         res.json({ users: sorted });
     } catch (error) {
         console.error('User search error:', error);
         res.status(500).json({ error: 'Search failed' });
+    }
+});
+
+/**
+ * GET /users/resolve-handle?handle=@name
+ * Resolve a mention handle to a single user (exact match priority).
+ */
+router.get('/resolve-handle', async (req, res) => {
+    try {
+        const includeExternal = String(req.query?.includeExternal || '').trim() === '1';
+        const rawHandle = String(req.query?.handle || req.query?.q || '').trim();
+        const candidates = handleCandidates(rawHandle);
+        if (candidates.length === 0) {
+            return res.json({ user: null });
+        }
+        const cacheKey = `${includeExternal ? '1' : '0'}:${candidates.join('|')}`;
+        const cached = cacheGetHandleResolution(cacheKey);
+        if (cached) return res.json(cached);
+
+        const exactRegex = candidates.map((c) => new RegExp(`^${escapeRegex(c)}$`, 'i'));
+        const users = await User.find(
+            {
+                ...(includeExternal ? {} : { isPlatformUser: true }),
+                $or: [
+                    { userId: { $in: exactRegex } },
+                    { aliases: { $in: exactRegex } },
+                    { displayName: { $in: exactRegex } },
+                ],
+            },
+            { userId: 1, displayName: 1, avatarUrl: 1, bio: 1, aliases: 1, _id: 0 }
+        ).limit(25);
+
+        const rank = (u) => {
+            const userId = String(u.userId || '').trim().toLowerCase();
+            const aliases = Array.isArray(u.aliases) ? u.aliases.map((a) => String(a || '').trim().toLowerCase()) : [];
+            const displayName = String(u.displayName || '').trim().toLowerCase();
+            for (const c of candidates) {
+                if (userId === c) return 0;
+                if (aliases.includes(c)) return 1;
+                if (displayName === c) return 2;
+            }
+            return 9;
+        };
+
+        const resolved = users
+            .map((u) => ({ ...u.toObject(), _rank: rank(u) }))
+            .sort((a, b) => a._rank - b._rank)
+            .find((u) => u._rank < 9);
+
+        if (!resolved) {
+            const payload = { user: null };
+            cacheSetHandleResolution(cacheKey, payload);
+            return res.json(payload);
+        }
+        const payload = {
+            user: {
+                userId: resolved.userId,
+                displayName: resolved.displayName || resolved.userId,
+                avatarUrl: resolved.avatarUrl || '',
+                bio: resolved.bio || '',
+            },
+        };
+        cacheSetHandleResolution(cacheKey, payload);
+        return res.json(payload);
+    } catch (error) {
+        console.error('Resolve handle error:', error);
+        res.status(500).json({ error: 'Handle resolve failed' });
     }
 });
 
@@ -165,11 +242,17 @@ router.post('/me/sync', clerkAuth, async (req, res) => {
         );
 
         if (!user) {
-            user = await User.create({ userId, aliases: aliases.length ? aliases : [userId] });
+            user = await User.create({ userId, aliases: aliases.length ? aliases : [userId], isPlatformUser: true });
         } else if (aliases.length > 0) {
             user = await User.findOneAndUpdate(
                 { userId },
-                { $addToSet: { aliases: { $each: aliases } } },
+                { $addToSet: { aliases: { $each: aliases } }, $set: { isPlatformUser: true } },
+                { new: true, projection: { userId: 1, aliases: 1, displayName: 1, avatarUrl: 1, bio: 1, _id: 0 } }
+            );
+        } else {
+            user = await User.findOneAndUpdate(
+                { userId },
+                { $set: { isPlatformUser: true } },
                 { new: true, projection: { userId: 1, aliases: 1, displayName: 1, avatarUrl: 1, bio: 1, _id: 0 } }
             );
         }
@@ -203,7 +286,8 @@ router.post('/me/reconcile', clerkAuth, async (req, res) => {
         const me = await User.findOneAndUpdate(
             { userId },
             {
-                $setOnInsert: { userId },
+                $setOnInsert: { userId, isPlatformUser: true },
+                $set: { isPlatformUser: true },
                 ...(aliases.length > 0 ? { $addToSet: { aliases: { $each: aliases } } } : {}),
             },
             { upsert: true, new: true }
@@ -265,7 +349,7 @@ router.put('/me/profile', clerkAuth, async (req, res) => {
 
         const user = await User.findOneAndUpdate(
             { userId },
-            { $set: { displayName, bio } },
+            { $set: { displayName, bio, isPlatformUser: true } },
             { upsert: true, new: true, projection: { userId: 1, displayName: 1, avatarUrl: 1, bio: 1, _id: 0 } }
         );
 
@@ -297,7 +381,7 @@ router.post('/me/avatar', clerkAuth, avatarUpload.single('avatar'), async (req, 
 
         await User.findOneAndUpdate(
             { userId },
-            { $set: { avatarUrl, manualAvatarUrl: avatarUrl, avatarPreference: 'manual' } },
+            { $set: { avatarUrl, manualAvatarUrl: avatarUrl, avatarPreference: 'manual', isPlatformUser: true } },
             { upsert: true }
         );
 
@@ -365,6 +449,7 @@ router.post('/me/avatar-preference', clerkAuth, async (req, res) => {
  */
 router.post('/lookup', clerkAuth, async (req, res) => {
     try {
+        const includeExternal = String(req.query?.includeExternal || '').trim() === '1';
         const input = Array.isArray(req.body?.userIds) ? req.body.userIds : [];
         const uniqueIds = Array.from(
             new Set(
@@ -377,39 +462,21 @@ router.post('/lookup', clerkAuth, async (req, res) => {
         if (uniqueIds.length === 0) return res.json({ users: [] });
 
         const users = await User.find(
-            { userId: { $in: uniqueIds } },
+            { userId: { $in: uniqueIds }, ...(includeExternal ? {} : { isPlatformUser: true }) },
             { userId: 1, displayName: 1, avatarUrl: 1, bio: 1, _id: 0 }
         );
         const userMap = new Map(users.map((u) => [u.userId, u]));
 
-        const postFallbacks = await Post.aggregate([
-            { $match: { userId: { $in: uniqueIds } } },
-            { $sort: { createdAt: -1 } },
-            {
-                $group: {
-                    _id: '$userId',
-                    displayName: { $first: '$displayName' },
-                    avatarUrl: { $first: '$avatarUrl' },
-                },
-            },
-        ]);
-        const fallbackMap = new Map(
-            postFallbacks.map((p) => [
-                String(p._id || ''),
-                { displayName: p.displayName || '', avatarUrl: p.avatarUrl || '' },
-            ])
-        );
-
         const result = uniqueIds.map((id) => {
             const user = userMap.get(id);
-            const fallback = fallbackMap.get(id);
+            if (!user) return null;
             return {
                 userId: id,
-                displayName: user?.displayName || fallback?.displayName || id,
-                avatarUrl: user?.avatarUrl || fallback?.avatarUrl || '',
+                displayName: user?.displayName || id,
+                avatarUrl: user?.avatarUrl || '',
                 bio: user?.bio || '',
             };
-        });
+        }).filter(Boolean);
 
         res.json({ users: result });
     } catch (error) {
@@ -425,11 +492,13 @@ router.post('/lookup', clerkAuth, async (req, res) => {
 router.get('/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
+        const includeExternal = String(req.query?.includeExternal || '').trim() === '1';
 
         const user = await User.findOne(
             { userId },
             {
                 userId: 1,
+                isPlatformUser: 1,
                 displayName: 1,
                 avatarUrl: 1,
                 manualAvatarUrl: 1,
@@ -444,6 +513,9 @@ router.get('/:userId', async (req, res) => {
         );
 
         if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        if (!includeExternal && user.isPlatformUser !== true) {
             return res.status(404).json({ error: 'User not found' });
         }
 

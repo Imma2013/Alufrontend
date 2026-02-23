@@ -115,6 +115,7 @@ async function syncUserDirectory(claims) {
   const setFields = {};
   if (displayName) setFields.displayName = displayName;
   if (avatarUrl) setFields.avatarUrl = avatarUrl;
+  setFields.isPlatformUser = true;
 
   await User.findOneAndUpdate(
     { userId },

@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 // User Schema - Tracks credits + profile info
 const UserSchema = new mongoose.Schema({
   userId: { type: String, required: true, unique: true },
+  isPlatformUser: { type: Boolean, default: false, index: true },
   aliases: [{ type: String }],
   displayName: { type: String, default: '' },
   avatarUrl: { type: String, default: '' },

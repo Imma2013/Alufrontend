@@ -146,6 +146,7 @@ router.post('/bridge/profile-sync', clerkAuth, async (req, res) => {
       $setOnInsert: { userId: actorDid },
       $addToSet: aliases.length > 0 ? { aliases: { $each: aliases } } : undefined,
       $set: {
+        isPlatformUser: true,
         displayName,
         ...(blueskyAvatarUrl ? { blueskyAvatarUrl } : {}),
         ...(shouldApplyAvatar ? { avatarUrl: blueskyAvatarUrl } : {}),

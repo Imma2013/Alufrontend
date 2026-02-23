@@ -1,7 +1,7 @@
 'use client';
 
 import { BACKEND_URL } from '@/app/lib/backend';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useUser } from '../lib/auth';
 import { useAuth } from '../lib/auth';
 
@@ -16,16 +16,9 @@ export default function EditProfile({ onBack }: EditProfileProps) {
     const [bio, setBio] = useState((user?.unsafeMetadata?.bio as string) || '');
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [profileImage, setProfileImage] = useState<File | null>(null);
-    const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [currentAvatarUrl, setCurrentAvatarUrl] = useState('');
-    const [manualAvatarUrl, setManualAvatarUrl] = useState('');
     const [blueskyAvatarUrl, setBlueskyAvatarUrl] = useState('');
-    const [avatarPreference, setAvatarPreference] = useState<'manual' | 'bluesky'>('manual');
-    const [switchingAvatar, setSwitchingAvatar] = useState(false);
-    const [avatarMessage, setAvatarMessage] = useState('');
     const [avatarBroken, setAvatarBroken] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const refreshServerProfile = async () => {
         if (!user?.id) return;
@@ -37,10 +30,7 @@ export default function EditProfile({ onBack }: EditProfileProps) {
             if (!res.ok) return;
             const data = await res.json();
             setCurrentAvatarUrl(String(data?.avatarUrl || '').trim());
-            setManualAvatarUrl(String(data?.manualAvatarUrl || '').trim());
             setBlueskyAvatarUrl(String(data?.blueskyAvatarUrl || '').trim());
-            const pref = String(data?.avatarPreference || 'manual').trim().toLowerCase();
-            setAvatarPreference(pref === 'bluesky' ? 'bluesky' : 'manual');
             setAvatarBroken(false);
         } catch {
         }
@@ -49,47 +39,6 @@ export default function EditProfile({ onBack }: EditProfileProps) {
     useEffect(() => {
         void refreshServerProfile();
     }, [user?.id]);
-
-    const switchAvatarSource = async (source: 'manual' | 'bluesky') => {
-        setSwitchingAvatar(true);
-        setError(null);
-        setAvatarMessage('');
-        try {
-            const token = await getToken();
-            if (!token) throw new Error('Sign in again to change avatar source.');
-            const res = await fetch(`${BACKEND_URL}/users/me/avatar-preference`, {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ source }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data?.error || 'Could not switch avatar source.');
-            setAvatarPreference(source);
-            if (data?.avatarUrl) setCurrentAvatarUrl(String(data.avatarUrl || '').trim());
-            setAvatarBroken(false);
-            setAvatarMessage(source === 'bluesky' ? 'Using Bluesky avatar.' : 'Using Alu avatar.');
-            await refreshServerProfile();
-        } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : 'Could not switch avatar source.';
-            setError(message);
-        } finally {
-            setSwitchingAvatar(false);
-        }
-    };
-
-    const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        if (file.size > 10 * 1024 * 1024) {
-            setError('Image too large. Max 10MB.');
-            return;
-        }
-        setProfileImage(file);
-        setImagePreview(URL.createObjectURL(file));
-    };
 
     const handleSave = async () => {
         if (!user) return;
@@ -109,12 +58,6 @@ export default function EditProfile({ onBack }: EditProfileProps) {
                     bio: bio.trim(),
                 },
             });
-
-            // Update profile image
-            if (profileImage) {
-                await user.setProfileImage({ file: profileImage });
-                setAvatarMessage('Alu avatar updated.');
-            }
 
             // Sync latest display/avatar into backend directory for search/feed rendering.
             try {
@@ -139,16 +82,10 @@ export default function EditProfile({ onBack }: EditProfileProps) {
         }
     };
 
-    const normalizedPreview = String(imagePreview || '').trim();
     const normalizedCurrentAvatar = String(currentAvatarUrl || '').trim();
-    const normalizedManualAvatar = String(manualAvatarUrl || '').trim();
     const normalizedBlueskyAvatar = String(blueskyAvatarUrl || '').trim();
     const normalizedStoredAvatar = String(user?.imageUrl || '').trim();
-    const preferredAvatar =
-        avatarPreference === 'bluesky'
-            ? (normalizedBlueskyAvatar || normalizedManualAvatar)
-            : (normalizedManualAvatar || normalizedBlueskyAvatar);
-    const avatarToRender = normalizedPreview || preferredAvatar || normalizedCurrentAvatar || normalizedStoredAvatar;
+    const avatarToRender = normalizedBlueskyAvatar || normalizedCurrentAvatar || normalizedStoredAvatar;
 
     return (
         <div className="fixed inset-0 z-[100] bg-[var(--alu-bg)] animate-slide-up overflow-y-auto">
@@ -189,48 +126,13 @@ export default function EditProfile({ onBack }: EditProfileProps) {
                             </div>
                         )}
                     </div>
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        onChange={handleImageSelect}
-                        className="hidden"
-                    />
-                    <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="text-sm font-semibold text-[var(--alu-primary)] hover:opacity-80 transition-opacity"
-                    >
-                        Change Photo
-                    </button>
                 </div>
 
                 <div className="mb-6 rounded-xl border border-alu-border p-3 bg-white">
                     <p className="text-xs font-semibold text-alu-text-secondary mb-2">Bluesky Profile</p>
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => switchAvatarSource('manual')}
-                            disabled={switchingAvatar}
-                            className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-60 ${
-                                avatarPreference === 'manual'
-                                    ? 'bg-alu-text text-white border-alu-text'
-                                    : 'bg-alu-surface text-alu-text border-alu-border hover:bg-alu-border'
-                            }`}
-                        >
-                            Use Alu Avatar
-                        </button>
-                        <button
-                            onClick={() => switchAvatarSource('bluesky')}
-                            disabled={switchingAvatar || !blueskyAvatarUrl}
-                            className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-60 ${
-                                avatarPreference === 'bluesky'
-                                    ? 'bg-alu-text text-white border-alu-text'
-                                    : 'bg-alu-surface text-alu-text border-alu-border hover:bg-alu-border'
-                            }`}
-                        >
-                            Use Bluesky Avatar
-                        </button>
-                    </div>
-                    {avatarMessage && <p className="text-[11px] text-alu-text-tertiary mt-2">{avatarMessage}</p>}
+                    <p className="text-[11px] text-alu-text-tertiary">
+                        Avatar is synced from your Bluesky profile.
+                    </p>
                 </div>
 
                 {/* Display Name */}
