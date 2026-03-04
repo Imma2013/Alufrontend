@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { resolveMediaList } from '../lib/mediaUrl';
 
 interface ImageCarouselProps {
   images: string[]; // Array of image URLs
@@ -17,6 +18,7 @@ export default function ImageCarousel({
   showDots = 'always',
   avoidTopRight = false,
 }: ImageCarouselProps) {
+  const resolvedImages = resolveMediaList(images || []);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
@@ -48,7 +50,7 @@ export default function ImageCarousel({
     const isLeftSwipe = distance > minSwipeDistance;
     const isRightSwipe = distance < -minSwipeDistance;
 
-    if (isLeftSwipe && currentIndex < images.length - 1) {
+    if (isLeftSwipe && currentIndex < resolvedImages.length - 1) {
       setCurrentIndex(prev => prev + 1);
     } else if (isRightSwipe && currentIndex > 0) {
       setCurrentIndex(prev => prev - 1);
@@ -60,7 +62,7 @@ export default function ImageCarousel({
   };
 
   const goToNext = () => {
-    setCurrentIndex(prev => Math.min(images.length - 1, prev + 1));
+    setCurrentIndex(prev => Math.min(resolvedImages.length - 1, prev + 1));
   };
 
   const goToSlide = (index: number) => {
@@ -70,11 +72,11 @@ export default function ImageCarousel({
     showDots === 'always' || (showDots === 'mobile' && isMobile);
 
   // Single image - no carousel needed
-  if (images.length <= 1) {
+  if (resolvedImages.length <= 1) {
     return (
       <div className="relative w-full h-full">
         <img
-          src={images[0]}
+          src={resolvedImages[0]}
           alt=""
           className={`w-full h-full ${objectFit === 'contain' ? 'object-contain bg-black' : 'object-cover'}`}
         />
@@ -94,7 +96,7 @@ export default function ImageCarousel({
         className="flex h-full transition-transform duration-300 ease-out"
         style={{ transform: `translateX(-${currentIndex * 100}%)` }}
       >
-        {images.map((url, i) => (
+        {resolvedImages.map((url, i) => (
           <div key={i} className="w-full h-full flex-shrink-0">
             <img
               src={url}
@@ -117,7 +119,7 @@ export default function ImageCarousel({
           </svg>
         </button>
       )}
-      {!isMobile && currentIndex < images.length - 1 && (
+      {!isMobile && currentIndex < resolvedImages.length - 1 && (
         <button
           onClick={(e) => { e.stopPropagation(); goToNext(); }}
           className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/90 hover:bg-white shadow-lg flex items-center justify-center transition-all hover:scale-110 z-10"
@@ -132,7 +134,7 @@ export default function ImageCarousel({
       {/* Dots indicator */}
       {shouldShowDots && (
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
-          {images.map((_, i) => (
+          {resolvedImages.map((_, i) => (
             <button
               key={i}
               onClick={(e) => { e.stopPropagation(); goToSlide(i); }}
@@ -149,7 +151,7 @@ export default function ImageCarousel({
 
       {/* Image counter (top right) */}
       <div className={`absolute top-3 ${avoidTopRight ? 'right-14 md:right-3' : 'right-3'} px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm text-white text-xs font-medium z-10`}>
-        {currentIndex + 1} / {images.length}
+        {currentIndex + 1} / {resolvedImages.length}
       </div>
     </div>
   );

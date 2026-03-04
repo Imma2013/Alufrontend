@@ -11,6 +11,7 @@ import ImageCarousel from './ImageCarousel';
 import MentionText from './MentionText';
 import { getPostShareUrl } from '@/app/lib/publicUrl';
 import { getBlueskyProfileUrl, resolveMentionUserId } from '@/app/lib/mentions';
+import { resolveMediaList, resolveMediaUrl } from '@/app/lib/mediaUrl';
 
 interface CommentData {
   _id: string;
@@ -84,11 +85,14 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
   }, [post._id, post.mediaType, post.images]);
 
   const fallbackSingleImage = Array.isArray(post.images) && post.images.length > 0
-    ? String(post.images[0] || '').trim()
+    ? String(resolveMediaList(post.images)[0] || '').trim()
     : '';
+  const primaryContentUrl = resolveMediaUrl(post.contentUrl || '');
+  const primaryThumbnailUrl = resolveMediaUrl(post.thumbnailUrl || '');
+  const resolvedImages = resolveMediaList(post.images || []);
   const primarySingleImage = primaryImageFailed
     ? (fallbackSingleImage || '')
-    : (post.contentUrl || fallbackSingleImage || '');
+    : (primaryContentUrl || fallbackSingleImage || '');
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -573,7 +577,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
             <div className="w-full h-full flex items-center justify-center">
               {post.images && post.images.length > 1 ? (
                 <div className="w-full h-full">
-                  <ImageCarousel images={post.images} objectFit="contain" showDots="mobile" avoidTopRight />
+                  <ImageCarousel images={resolvedImages} objectFit="contain" showDots="mobile" avoidTopRight />
                 </div>
               ) : (
                 <img
@@ -582,7 +586,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
                   className="object-cover w-full h-full"
                   onLoad={() => setMediaLoaded(true)}
                   onError={() => {
-                    if (!primaryImageFailed && fallbackSingleImage && post.contentUrl !== fallbackSingleImage) {
+                    if (!primaryImageFailed && fallbackSingleImage && primaryContentUrl !== fallbackSingleImage) {
                       setPrimaryImageFailed(true);
                       return;
                     }
@@ -594,9 +598,10 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
           ) : (
             <div className="w-full h-full relative">
               <video
-                src={post.contentUrl}
+                src={primaryContentUrl}
                 controls
                 playsInline
+                poster={primaryThumbnailUrl || undefined}
                 className="object-contain w-full h-full"
                 onLoadedData={() => setMediaLoaded(true)}
                 onError={() => setMediaLoaded(true)}

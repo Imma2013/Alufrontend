@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { getFileUrl } from '../fileSystem';
 import { Post } from '../db';
 import ImageCarousel from './ImageCarousel';
+import { resolveMediaList, resolveMediaUrl } from '../lib/mediaUrl';
 
 interface MediaItemProps {
   post: Post;
@@ -27,8 +28,13 @@ export default function MediaItem({
   const [imageFailed, setImageFailed] = useState(false);
   const [videoFailed, setVideoFailed] = useState(false);
 
-  const fallbackImage = Array.isArray(post.images) && post.images.length > 0
-    ? String(post.images[0] || '').trim()
+  const resolvedRemoteContentUrl = post.contentUrl?.startsWith('http')
+    ? resolveMediaUrl(post.contentUrl)
+    : post.contentUrl;
+  const resolvedThumbnailUrl = resolveMediaUrl(post.thumbnailUrl || '');
+  const resolvedImages = resolveMediaList(post.images || []);
+  const fallbackImage = resolvedImages.length > 0
+    ? String(resolvedImages[0] || '').trim()
     : '';
 
   useEffect(() => {
@@ -43,7 +49,7 @@ export default function MediaItem({
 
     // If contentUrl is a full URL (from cloud sync / Cloudinary), use directly
     if (post.contentUrl.startsWith('http')) {
-      setLocalUrl(post.contentUrl);
+      setLocalUrl(resolvedRemoteContentUrl);
       setIsRemote(true);
       return;
     }
@@ -67,18 +73,18 @@ export default function MediaItem({
         URL.revokeObjectURL(localUrl);
       }
     };
-  }, [post.contentUrl]);
+  }, [post.contentUrl, resolvedRemoteContentUrl]);
 
   // Check for multi-image carousel
-  const hasMultipleImages = post.images && post.images.length > 1;
+  const hasMultipleImages = resolvedImages.length > 1;
 
   if (!localUrl && !hasMultipleImages && !fallbackImage) {
     return <div className="w-full h-full bg-[var(--alu-surface)] animate-pulse rounded-lg"></div>;
   }
 
   // Multi-image carousel
-  if (hasMultipleImages && post.images) {
-    return <ImageCarousel images={post.images} objectFit={imageObjectFit} />;
+  if (hasMultipleImages) {
+    return <ImageCarousel images={resolvedImages} objectFit={imageObjectFit} />;
   }
 
   // Single image or video
@@ -98,7 +104,7 @@ export default function MediaItem({
       ) : (
         videoFailed ? (
           <img
-            src={post.thumbnailUrl || fallbackImage || ''}
+            src={resolvedThumbnailUrl || fallbackImage || ''}
             alt={post.safePrompt}
             className={`${videoObjectFit === 'contain' ? 'object-contain bg-black' : 'object-cover'} w-full h-full`}
           />
@@ -110,7 +116,7 @@ export default function MediaItem({
             loop={autoPlayVideo}
             muted={mutedVideo}
             playsInline
-            poster={post.thumbnailUrl || undefined}
+            poster={resolvedThumbnailUrl || undefined}
             className={`${videoObjectFit === 'contain' ? 'object-contain' : 'object-cover'} w-full h-full`}
             onError={() => setVideoFailed(true)}
           />

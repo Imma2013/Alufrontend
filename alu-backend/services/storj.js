@@ -4,7 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
 const axios = require('axios');
-const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const ffmpegPath = require('ffmpeg-static');
 
 const ENDPOINT = process.env.STORJ_S3_ENDPOINT;
@@ -179,12 +179,27 @@ function keyFromPublicUrl(url) {
     return decodeURIComponent(clean.slice(PUBLIC_BASE.length + 1));
   }
 
-  const endpointPrefix = `${ENDPOINT.replace(/\/+$/, '')}/${BUCKET}/`;
-  if (clean.startsWith(endpointPrefix)) {
-    return decodeURIComponent(clean.slice(endpointPrefix.length));
+  if (ENDPOINT && BUCKET) {
+    const endpointPrefix = `${ENDPOINT.replace(/\/+$/, '')}/${BUCKET}/`;
+    if (clean.startsWith(endpointPrefix)) {
+      return decodeURIComponent(clean.slice(endpointPrefix.length));
+    }
   }
 
   return null;
+}
+
+async function getObjectByPublicUrl(url) {
+  const key = keyFromPublicUrl(url);
+  if (!key) return null;
+  const client = getS3();
+  const resp = await client.send(
+    new GetObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+    })
+  );
+  return { key, ...resp };
 }
 
 async function deletePublicUrl(url) {
@@ -205,6 +220,6 @@ module.exports = {
   uploadVideoFileWithThumbnail,
   uploadVideoBufferWithThumbnail,
   uploadRemoteVideoWithThumbnail,
+  getObjectByPublicUrl,
   deletePublicUrl,
 };
-

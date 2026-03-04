@@ -10,7 +10,12 @@ router.post('/pull', async (req, res) => {
   const { lastSyncTime } = req.body;
 
   try {
-    let query = { visibility: { $in: ['everyone', undefined] } };
+    let query = {
+      $or: [
+        { visibility: 'everyone' },
+        { visibility: { $exists: false } },
+      ],
+    };
     if (lastSyncTime) {
       query.updatedAt = { $gt: new Date(lastSyncTime) };
     }

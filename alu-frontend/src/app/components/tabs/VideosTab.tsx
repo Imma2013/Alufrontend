@@ -10,6 +10,7 @@ import { db, Post } from '../../db';
 import { getFileUrl } from '../../fileSystem';
 import MediaItem from '../MediaItem';
 import { VideosIcon } from '../icons';
+import { resolveMediaUrl } from '@/app/lib/mediaUrl';
 
 interface VideosTabProps {
   searchQuery?: string;
@@ -219,7 +220,7 @@ export default function VideosTab({
 
           try {
             if (video.contentUrl.startsWith('http')) {
-              src = video.contentUrl;
+              src = resolveMediaUrl(video.contentUrl);
             } else {
               src = await getFileUrl(video.contentUrl);
               revoke = true;
@@ -268,7 +269,7 @@ export default function VideosTab({
       if (!video) return;
 
       try {
-        const src = video.contentUrl.startsWith('http') ? video.contentUrl : await getFileUrl(video.contentUrl);
+        const src = video.contentUrl.startsWith('http') ? resolveMediaUrl(video.contentUrl) : await getFileUrl(video.contentUrl);
         if (!cancelled) {
           setPreviewSrcMap((prev) => ({ ...prev, [hoveredVideoId]: src }));
         }
@@ -353,7 +354,7 @@ export default function VideosTab({
                 <div className="w-full aspect-video rounded-xl overflow-hidden relative bg-alu-surface">
                   {video.thumbnailUrl ? (
                     <img
-                      src={video.thumbnailUrl}
+                      src={resolveMediaUrl(video.thumbnailUrl)}
                       alt=""
                       className={`w-full h-full object-cover transition-opacity duration-300 ${isHovered && previewSrc ? 'opacity-0' : 'opacity-100'}`}
                     />
