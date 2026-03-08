@@ -583,7 +583,7 @@ export default function PostModal({ post, onClose, onViewUser, onDeleted, openCo
                 <img
                   src={primarySingleImage}
                   alt={post.safePrompt}
-                  className="object-cover w-full h-full"
+                  className="object-contain w-full h-full"
                   onLoad={() => setMediaLoaded(true)}
                   onError={() => {
                     if (!primaryImageFailed && fallbackSingleImage && primaryContentUrl !== fallbackSingleImage) {

@@ -332,7 +332,6 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isSwiping) return;
-    if (e.cancelable) e.preventDefault();
     const deltaY = e.touches[0].clientY - touchStartY.current;
     const canGoUp = currentIndex < shortsList.length - 1;
     const canGoDown = currentIndex > 0;
@@ -460,7 +459,7 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
             height: isMobile ? 'calc(100vh - 120px)' : 'calc(100vh - 150px)',
             maxHeight: '780px',
             width: !isMobile && showComments ? '430px' : undefined,
-            touchAction: showComments ? 'pan-y' : 'none',
+            touchAction: 'pan-y',
           }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -469,8 +468,9 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
           <div
             className={`w-full h-full overflow-hidden relative bg-black ${isMobile ? '' : 'md:rounded-2xl'}`}
             style={{
-              transform: `translateY(${swipeOffset}px)`,
-              transition: isSwiping ? 'none' : 'transform 0.42s cubic-bezier(0.22, 0.61, 0.36, 1)',
+              transform: `translate3d(0, ${swipeOffset}px, 0)`,
+              transition: isSwiping ? 'none' : 'transform 0.32s cubic-bezier(0.22, 0.61, 0.36, 1)',
+              willChange: 'transform',
             }}
           >
             <div className="absolute inset-0" ref={videoContainerRef} onClick={handleTapVideo}>
