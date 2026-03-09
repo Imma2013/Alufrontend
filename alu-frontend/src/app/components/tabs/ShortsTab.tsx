@@ -435,7 +435,11 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
   const creatorAvatarKey = `${short.userId || 'anon'}:${short._id}`;
 
   return (
-    <div className="w-full h-full min-h-[70vh] flex items-center justify-center animate-fade-in bg-black select-none overscroll-none" onWheel={handleWheel}>
+    <div
+      className="w-full h-full min-h-[70vh] flex items-center justify-center animate-fade-in bg-black select-none overscroll-none"
+      style={{ overscrollBehaviorY: 'contain' }}
+      onWheel={handleWheel}
+    >
       <div className="relative flex items-center justify-center w-full h-full">
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-4 text-white text-sm font-semibold">
           <button
@@ -456,10 +460,11 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
             !isMobile && showComments ? 'md:-translate-x-[180px]' : 'translate-x-0'
           }`}
           style={{
-            height: isMobile ? 'calc(100vh - 120px)' : 'calc(100vh - 150px)',
+            height: isMobile ? 'calc(100dvh - 120px)' : 'calc(100dvh - 150px)',
             maxHeight: '780px',
             width: !isMobile && showComments ? '430px' : undefined,
             touchAction: 'pan-y',
+            contain: 'layout paint style',
           }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -471,6 +476,7 @@ export default function ShortsTab({ searchQuery = '', onViewUser, showAI = true,
               transform: `translate3d(0, ${swipeOffset}px, 0)`,
               transition: isSwiping ? 'none' : 'transform 0.32s cubic-bezier(0.22, 0.61, 0.36, 1)',
               willChange: 'transform',
+              backfaceVisibility: 'hidden',
             }}
           >
             <div className="absolute inset-0" ref={videoContainerRef} onClick={handleTapVideo}>

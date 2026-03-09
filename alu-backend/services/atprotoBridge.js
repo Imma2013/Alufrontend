@@ -22,7 +22,40 @@ function isDirectVideoUrl(url) {
   return /\.(mp4|m3u8|webm|mov)(\?|$)/i.test(String(url || '').trim());
 }
 
-function mediaFromEmbed(embed) {
+async function estimateHlsDurationSeconds(playlistUrl, depth = 0) {
+  const source = normalizeUrl(playlistUrl);
+  if (!source || depth > 2) return 0;
+  try {
+    const res = await fetch(source, { redirect: 'follow' });
+    if (!res.ok) return 0;
+    const body = await res.text();
+    if (!body) return 0;
+
+    let total = 0;
+    const lines = body.split(/\r?\n/);
+    for (const line of lines) {
+      const m = line.match(/^#EXTINF:([\d.]+)/i);
+      if (m) total += Number(m[1] || 0);
+    }
+    if (total > 0) return total;
+
+    // Master playlist fallback: recurse into first variant.
+    for (let i = 0; i < lines.length; i += 1) {
+      if (!/^#EXT-X-STREAM-INF/i.test(lines[i] || '')) continue;
+      const variant = String(lines[i + 1] || '').trim();
+      if (!variant || variant.startsWith('#')) continue;
+      const variantUrl = normalizeUrl(new URL(variant, source).toString());
+      if (!variantUrl) continue;
+      const nested = await estimateHlsDurationSeconds(variantUrl, depth + 1);
+      if (nested > 0) return nested;
+    }
+  } catch (_) {
+    return 0;
+  }
+  return 0;
+}
+
+async function mediaFromEmbed(embed) {
   if (!embed || typeof embed !== 'object') return null;
   const embedType = String(embed.$type || '').trim();
 
@@ -44,11 +77,14 @@ function mediaFromEmbed(embed) {
     const thumb = normalizeUrl(embed.thumbnail);
     const contentUrl = playlist || thumb;
     if (!contentUrl) return null;
+    const durationSeconds = playlist ? Math.round(await estimateHlsDurationSeconds(playlist)) : 0;
     return {
       mediaType: 'video',
       contentUrl,
       images: [],
       thumbnailUrl: thumb,
+      durationSeconds,
+      videoType: durationSeconds >= 60 ? 'long' : 'short',
     };
   }
 
@@ -259,7 +295,7 @@ async function importAuthorPosts({ actor, maxPosts = 20 }) {
       continue;
     }
 
-    const media = mediaFromEmbed(post.embed);
+    const media = await mediaFromEmbed(post.embed);
     if (!media) {
       skipped += 1;
       continue;
@@ -291,7 +327,8 @@ async function importAuthorPosts({ actor, maxPosts = 20 }) {
             images: media.images,
             contentUrl: media.contentUrl,
             mediaType: media.mediaType,
-            videoType: media.mediaType === 'video' ? 'short' : undefined,
+            videoType: media.mediaType === 'video' ? (media.videoType || 'short') : undefined,
+            durationSeconds: media.mediaType === 'video' ? Number(media.durationSeconds || 0) : 0,
             timestamp,
           },
         }
@@ -308,7 +345,8 @@ async function importAuthorPosts({ actor, maxPosts = 20 }) {
       caption,
       is_ai: false,
       mediaType: media.mediaType,
-      videoType: media.mediaType === 'video' ? 'short' : undefined,
+      videoType: media.mediaType === 'video' ? (media.videoType || 'short') : undefined,
+      durationSeconds: media.mediaType === 'video' ? Number(media.durationSeconds || 0) : 0,
       timestamp,
       thumbnailUrl: media.thumbnailUrl || '',
       visibility: 'everyone',

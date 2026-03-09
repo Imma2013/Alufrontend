@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getFileUrl } from '../fileSystem';
 import { Post } from '../db';
 import ImageCarousel from './ImageCarousel';
 import { resolveMediaList, resolveMediaUrl } from '../lib/mediaUrl';
+import { buildExternalVideoEmbedUrl, isExternalVideoPost } from '../lib/externalVideo';
 
 interface MediaItemProps {
   post: Post;
@@ -27,6 +28,9 @@ export default function MediaItem({
   const [isRemote, setIsRemote] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const [videoFailed, setVideoFailed] = useState(false);
+  const [nativeHlsSupported, setNativeHlsSupported] = useState(true);
+  const [hlsJsSupported, setHlsJsSupported] = useState<boolean | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const resolvedRemoteContentUrl = post.contentUrl?.startsWith('http')
     ? resolveMediaUrl(post.contentUrl)
@@ -41,6 +45,36 @@ export default function MediaItem({
     setImageFailed(false);
     setVideoFailed(false);
   }, [post._id, post.contentUrl, fallbackImage]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const probe = document.createElement('video');
+    const canPlayHls = !!(
+      probe.canPlayType('application/vnd.apple.mpegurl') ||
+      probe.canPlayType('application/x-mpegURL')
+    );
+    setNativeHlsSupported(canPlayHls);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (nativeHlsSupported) {
+      setHlsJsSupported(true);
+      return;
+    }
+    (async () => {
+      try {
+        const mod = await import('hls.js');
+        if (!active) return;
+        setHlsJsSupported(Boolean(mod.default?.isSupported?.()));
+      } catch {
+        if (active) setHlsJsSupported(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [nativeHlsSupported]);
 
   useEffect(() => {
     let isMounted = true;
@@ -77,6 +111,56 @@ export default function MediaItem({
 
   // Check for multi-image carousel
   const hasMultipleImages = resolvedImages.length > 1;
+  const externalVideo = isExternalVideoPost(post);
+  const externalEmbedUrl = externalVideo
+    ? buildExternalVideoEmbedUrl(post, { autoplay: autoPlayVideo, muted: mutedVideo, loop: autoPlayVideo })
+    : '';
+  const isHlsStream = /\.m3u8(\?|$)/i.test(String(localUrl || ''));
+  const shouldUseHlsJs = isHlsStream && !nativeHlsSupported && hlsJsSupported === true;
+  const shouldFallbackFromHls = isHlsStream && !nativeHlsSupported && hlsJsSupported === false;
+
+  useEffect(() => {
+    if (!shouldUseHlsJs || !localUrl || !videoRef.current) return;
+    let destroyed = false;
+    let hls: import('hls.js').default | null = null;
+    (async () => {
+      try {
+        const mod = await import('hls.js');
+        const Hls = mod.default;
+        if (destroyed || !videoRef.current || !Hls.isSupported()) return;
+        hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+          backBufferLength: 30,
+        });
+        hls.loadSource(localUrl);
+        hls.attachMedia(videoRef.current);
+        hls.on(Hls.Events.ERROR, (_, data) => {
+          if (!data?.fatal || !hls) return;
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            hls.startLoad();
+            return;
+          }
+          if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError();
+            return;
+          }
+          setVideoFailed(true);
+          hls.destroy();
+          hls = null;
+        });
+      } catch {
+        setVideoFailed(true);
+      }
+    })();
+    return () => {
+      destroyed = true;
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+    };
+  }, [localUrl, shouldUseHlsJs]);
 
   if (!localUrl && !hasMultipleImages && !fallbackImage) {
     return <div className="w-full h-full bg-[var(--alu-surface)] animate-pulse rounded-lg"></div>;
@@ -102,7 +186,21 @@ export default function MediaItem({
           }}
         />
       ) : (
-        videoFailed ? (
+        externalVideo ? (
+          <iframe
+            src={externalEmbedUrl}
+            title={post.safePrompt || 'Imported video'}
+            className="w-full h-full"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        ) : videoFailed ? (
+          <img
+            src={resolvedThumbnailUrl || fallbackImage || ''}
+            alt={post.safePrompt}
+            className={`${videoObjectFit === 'contain' ? 'object-contain bg-black' : 'object-cover'} w-full h-full`}
+          />
+        ) : shouldFallbackFromHls ? (
           <img
             src={resolvedThumbnailUrl || fallbackImage || ''}
             alt={post.safePrompt}
@@ -110,7 +208,8 @@ export default function MediaItem({
           />
         ) : (
           <video
-            src={localUrl || ''}
+            ref={videoRef}
+            src={shouldUseHlsJs ? undefined : (localUrl || '')}
             controls={videoControls}
             autoPlay={autoPlayVideo}
             loop={autoPlayVideo}
